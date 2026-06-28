@@ -182,7 +182,8 @@ class OBJECT_PT_skeleton_hierarchy(bpy.types.Panel):
 
             box = layout.box()
             box.label(text="刚体 / 物理（裙子等）", icon='PHYSICS')
-            box.label(text="（规划中：裙骨 / 刚体 / 关节）", icon='INFO')
+            box.operator("object.add_skirt_physics", text="裙子刚体/物理(自动)", icon='PHYSICS')
+            box.label(text="复用已有裙骨，自适应识别裙链", icon='INFO')
 
 
 def register():
