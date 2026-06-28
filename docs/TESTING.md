@@ -1,4 +1,4 @@
-# Convert_to_MMD2 — 远程连接 & 测试指南
+# Convert_to_MMD5 — 远程连接 & 测试指南
 
 本指南让一个**全新的 Claude 会话**（从本目录打开）或人，能够：
 连接远程 Blender → 部署本插件 → 跑一遍 XPS→MMD 一键转换 → 与参考 PMX 并排对比验证。
@@ -31,9 +31,9 @@
 在**本目录的上一级**打包（用 `COPYFILE_DISABLE=1` 避免 macOS 生成 `._*` 资源叉文件），上传到远程临时目录：
 
 ```bash
-# 本机（Mac），cwd = Convert_to_MMD2
+# 本机（Mac），cwd = Convert_to_MMD5
 cd ..
-COPYFILE_DISABLE=1 tar czf /tmp/cmmd2.tgz --exclude='__pycache__' --exclude='.git' Convert_to_MMD2
+COPYFILE_DISABLE=1 tar czf /tmp/cmmd2.tgz --exclude='__pycache__' --exclude='.git' Convert_to_MMD5
 python3 <CLI_PY> --server http://<VPS_HOST>:9090 --password <PANEL_PW> \
     upload /tmp/cmmd2.tgz "<REMOTE_TMP>/cmmd2.tgz"
 # 注意：面板会把 basename 追加到目录后 → 实际落点是 "<REMOTE_TMP>/cmmd2.tgz/cmmd2.tgz"
@@ -45,7 +45,7 @@ python3 <CLI_PY> --server http://<VPS_HOST>:9090 --password <PANEL_PW> \
 import tarfile, os, shutil, sys, bpy
 src = r"<REMOTE_TMP>/cmmd2.tgz/cmmd2.tgz"           # 见上面的 basename 追加
 addons = r"<ADDON_DIR>"                              # ...Blender/3.6/scripts/addons
-dst = os.path.join(addons, "Convert_to_MMD2")
+dst = os.path.join(addons, "Convert_to_MMD5")
 if os.path.exists(dst): shutil.rmtree(dst)
 with tarfile.open(src) as t: t.extractall(addons)
 # 清掉 macOS AppleDouble 残留（若用了 COPYFILE_DISABLE 一般为 0）
@@ -53,9 +53,9 @@ for root,_,files in os.walk(dst):
     for f in files:
         if f.startswith("._"): os.remove(os.path.join(root,f))
 # 纯净重载
-for m in [m for m in sys.modules if m=="Convert_to_MMD2" or m.startswith("Convert_to_MMD2.")]:
+for m in [m for m in sys.modules if m=="Convert_to_MMD5" or m.startswith("Convert_to_MMD5.")]:
     del sys.modules[m]
-bpy.ops.preferences.addon_enable(module="Convert_to_MMD2")
+bpy.ops.preferences.addon_enable(module="Convert_to_MMD5")
 print("enabled; one_click op:", hasattr(bpy.types,"OBJECT_OT_one_click_convert"))
 ```
 
@@ -69,12 +69,12 @@ old = sys.modules.get("Convert_to_MMD")
 if old:                                   # 让旧插件的 register/unregister 变空操作
     old.register = lambda: None; old.unregister = lambda: None
 # 重新注册本插件，保证它的 operator 生效
-bpy.ops.preferences.addon_disable(module="Convert_to_MMD2")
-for m in [m for m in sys.modules if m=="Convert_to_MMD2" or m.startswith("Convert_to_MMD2.")]:
+bpy.ops.preferences.addon_disable(module="Convert_to_MMD5")
+for m in [m for m in sys.modules if m=="Convert_to_MMD5" or m.startswith("Convert_to_MMD5.")]:
     del sys.modules[m]
-bpy.ops.preferences.addon_enable(module="Convert_to_MMD2")
+bpy.ops.preferences.addon_enable(module="Convert_to_MMD5")
 # 确认 operator 绑到本包：
-print(bpy.types.OBJECT_OT_one_click_convert.__module__)   # 期望 Convert_to_MMD2.convert.pipeline
+print(bpy.types.OBJECT_OT_one_click_convert.__module__)   # 期望 Convert_to_MMD5.convert.pipeline
 ```
 
 > 重新部署改动后的代码：重复「上传 → 解压 → 纯净重载」即可（每次 `del sys.modules` 后 `addon_enable`）。

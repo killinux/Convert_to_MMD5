@@ -1,16 +1,24 @@
 {
-  "_comment": "Standard MMD A-pose arm directions (arms at ~45 degrees downward). Used as fallback when align_arms_to_reference cannot find a target armature in the scene. Directions are in armature-local space (Blender right-handed Z-up), unit length.",
-  "source": "MMD standard A-pose (generic)",
+  "_comment": "MMD arm rest pose measured from a real reference PMX (Purifier Inase 18 V1.pmx), so converted arms match real MMD models. *_dir = bone DIRECTION (upper_dir=腕.head->ひじ.head, fore_dir=ひじ.head->手首.head, wrist_dir=手首 tail/中指１ direction). *_roll_z = the bone's local Z axis (ROLL reference): a scalar bone.roll can't give a consistent world frame across bones pointing different ways, so roll is set with edit_bone.align_roll(this_Z). All in armature-local space (Blender right-handed Z-up), unit length. Step 1.6 (align_arms_to_canonical) aligns directions; complete.py aligns roll to *_roll_z.",
+  "source": "measured from Purifier Inase 18 V1.pmx rest pose",
   "space": "armature_local",
   "normalized": true,
   "arms": {
     "L": {
-      "upper_dir": [0.707107, 0.0, -0.707107],
-      "fore_dir":  [0.707107, 0.0, -0.707107]
+      "upper_dir": [0.796343, 0.011175, -0.604742],
+      "fore_dir":  [0.776210, 0.005282, -0.630452],
+      "wrist_dir": [0.946055, -0.028254, -0.322772],
+      "upper_roll_z": [0.604742, 0.0, 0.796394],
+      "fore_roll_z":  [0.630452, 0.0, 0.776230],
+      "wrist_roll_z": [0.322884, 0.0, 0.946429]
     },
     "R": {
-      "upper_dir": [-0.707107, 0.0, -0.707107],
-      "fore_dir":  [-0.707107, 0.0, -0.707107]
+      "upper_dir": [-0.796467, 0.011193, -0.604578],
+      "fore_dir":  [-0.776713, 0.004376, -0.629839],
+      "wrist_dir": [-0.947282, -0.032795, -0.318717],
+      "upper_roll_z": [0.604578, 0.0, -0.796547],
+      "fore_roll_z":  [0.629839, 0.0, -0.776732],
+      "wrist_roll_z": [0.318717, 0.0, -0.947847]
     }
   }
 }

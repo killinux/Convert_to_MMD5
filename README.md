@@ -1,4 +1,4 @@
-# Convert to MMD 2
+# Convert to MMD 5
 
 将外部骨骼格式（XPS / XNALara 等）**一键转换为 MMD（MikuMikuDance）格式**的 Blender 插件 —— 在原版 [Convert to MMD](https://gitee.com/UITCIS/Convert-to-MMD)（作者 **UITCIS / 空想幻灵**）基础上，对**骨骼管理引擎**做了一次从零重构。
 
@@ -32,7 +32,7 @@
 ## 目录结构
 
 ```
-Convert_to_MMD2/
+Convert_to_MMD5/
 ├─ __init__.py / ui.py / presets.py        注册 / 精简面板 / 槽位填充
 ├─ bone_map_and_group.py · bone_utils.py
 │  skeleton_identifier.py · helper_classifier.py
@@ -59,8 +59,8 @@ Convert_to_MMD2/
 
 ## 安装
 
-1. 把 `Convert_to_MMD2` 目录放进 Blender 的 `scripts/addons/`（或打包成 zip 后从偏好设置安装）。
-2. 偏好设置 → 插件，启用 **Convert to MMD 2**。
+1. 把 `Convert_to_MMD5` 目录放进 Blender 的 `scripts/addons/`（或打包成 zip 后从偏好设置安装）。
+2. 偏好设置 → 插件，启用 **Convert to MMD 5**。
 3. 视图右侧栏出现 **Convert to MMD** 面板。
 
 > 原版 Convert to MMD 与本插件共用相同的 `bl_idname`，**不要同时启用两者**（否则操作符会互相覆盖）。

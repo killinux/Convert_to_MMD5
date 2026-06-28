@@ -8,6 +8,7 @@ from .rename import OBJECT_OT_rename_to_mmd
 from .complete import OBJECT_OT_complete_missing_bones
 from .align import (
     OBJECT_OT_fix_forearm_bend,
+    OBJECT_OT_straighten_arms,
     OBJECT_OT_align_arms_to_canonical,
     OBJECT_OT_align_fingers_to_canonical,
 )
@@ -31,6 +32,7 @@ _CLASSES = (
     OBJECT_OT_rename_to_mmd,
     OBJECT_OT_complete_missing_bones,
     OBJECT_OT_fix_forearm_bend,
+    OBJECT_OT_straighten_arms,
     OBJECT_OT_align_arms_to_canonical,
     OBJECT_OT_align_fingers_to_canonical,
     OBJECT_OT_add_ik,

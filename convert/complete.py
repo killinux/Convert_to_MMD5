@@ -185,6 +185,13 @@ class OBJECT_OT_complete_missing_bones(bpy.types.Operator):
             pelvis_bone.parent = lower_body
 
         bone_utils.set_roll_values(edit_bones, bone_utils.DEFAULT_ROLL_VALUES)
+        # Arm roll: a scalar bone.roll (the 45°/135° defaults above) can't give a
+        # consistent world frame across 腕/ひじ/手首 (they point different ways), which
+        # left 手首 ~26° twisted under VMD. Override with align_roll to the target Z.
+        from .align import align_arm_rolls
+        nr = align_arm_rolls(edit_bones)
+        if nr:
+            print(f"[complete] 手臂 roll 对齐到目标 Z ({nr} 骨)")
         self._connect_finger_bones(edit_bones)
 
         # weight splits for the inserted bones (OBJECT mode for vertex-group edits)

@@ -6,6 +6,11 @@ unchanged (req 5). The 次标准 tab lists only the bone operators kept in this 
 
 import bpy
 
+# Bump this on every code update so you can SEE in the panel that Blender actually
+# reloaded the new code (Blender caches Python modules — a stale build means the
+# addon was not re-enabled/restarted). 改动后改这里。
+BUILD_STAMP = "build 2026-06-28 16:04:07"
+
 
 def _bone_row(layout, scene, obj, label_text, prop_name):
     row = layout.row(align=True)
@@ -73,6 +78,8 @@ class OBJECT_PT_skeleton_hierarchy(bpy.types.Panel):
         layout = self.layout
         scene = context.scene
         obj = context.active_object
+        # build stamp — always visible at the very top so you can confirm the reload took
+        layout.label(text=BUILD_STAMP, icon='FILE_REFRESH')
         if not obj or obj.type != 'ARMATURE':
             layout.label(text="请选中骨架对象", icon='INFO')
             layout.menu("TOPBAR_MT_file_import", text="导入模型", icon='IMPORT')
@@ -135,14 +142,30 @@ class OBJECT_PT_skeleton_hierarchy(bpy.types.Panel):
             ):
                 _finger_row(col, scene, obj, label, a, b, c)
 
-            layout.operator("object.correct_bones", text="归正骨架位置")
-            row = layout.row()
-            row.operator("object.rename_to_mmd", text="1.重命名为MMD")
-            row.operator("object.complete_missing_bones", text="2.补全缺失骨骼")
-            row = layout.row()
-            row.operator("object.add_mmd_ik", text="3.添加MMD IK")
-            row.operator("object.create_bone_group", text="4.创建骨骼集合")
-            layout.operator("object.use_mmd_tools_convert", text="5.使用mmdtools转换格式")
+            # 手动分步：按编号从上到下依次点，即可复现「一键转换」的全流程（1.6 对齐手臂 /
+            # 1.7 对齐手指 已从流程中删除）。自动识别(上方按钮)算第 0 步。
+            box = layout.box()
+            box.label(text="手动分步（自动识别后，从上到下依次点）", icon='SORTSIZE')
+            box.operator("object.correct_bones", text="1. 归正骨架位置")
+            box.operator("object.rename_to_mmd", text="2. 重命名为 MMD")
+            box.operator("object.transfer_unused_weights", text="3. 转移 unused 骨权重 ①")
+            box.operator("object.fix_forearm_bend", text="4. 修正前腕弯曲")
+            box.operator("object.complete_missing_bones", text="5. 补全缺失骨骼")
+            box.operator("object.transfer_unused_weights", text="6. 转移 unused 骨权重 ②")
+            box.operator("object.add_mmd_ik", text="7. 添加 MMD IK")
+            box.operator("object.create_bone_group", text="8. 创建骨骼集合")
+            box.operator("object.use_mmd_tools_convert", text="9. 使用 mmd_tools 转换格式")
+            box.label(text="—— 上为转换前 / 下为转换后 ——", icon='DOT')
+            box.operator("object.add_leg_d_bones", text="10. 添加腿部 D 骨骼")
+            box.operator("object.add_twist_bone", text="11. 添加捩骨骼")
+            box.operator("object.fix_palm_weights", text="12. 手部权重修正(拇指+掌骨)")
+            box.operator("object.add_shoulder_p_bones", text="13. 添加肩P骨骼")
+            box.operator("object.setup_mmd_grants", text="14. 设置标准付与")
+            box.operator("mmd_tools.apply_additional_transform", text="15. 应用付与变换")
+
+            opt = layout.box()
+            opt.label(text="可选工具（不在流程内）", icon='TOOL_SETTINGS')
+            opt.operator("object.straighten_arms", text="拉直手臂(肘+腕)", icon='BONE_DATA')
 
         else:
             box = layout.box()
@@ -155,9 +178,7 @@ class OBJECT_PT_skeleton_hierarchy(bpy.types.Panel):
             box.label(text="XPS 专项修正 / 权重", icon='MODIFIER')
             box.operator("object.transfer_unused_weights", text="转移 unused 骨权重", icon='MOD_VERTEX_WEIGHT')
             box.operator("object.fix_forearm_bend", text="修正前腕弯曲", icon='BONE_DATA')
-            r = box.row(align=True)
-            r.operator("object.align_arms_to_canonical", text="对齐上臂", icon='BONE_DATA')
-            r.operator("object.align_fingers_to_canonical", text="对齐手指", icon='BONE_DATA')
+            box.operator("object.straighten_arms", text="拉直手臂(肘+腕)", icon='BONE_DATA')
             box.operator("object.fix_palm_weights", text="手部权重修正(拇指+掌骨)", icon='MOD_VERTEX_WEIGHT')
             box.operator("object.setup_mmd_grants", text="设置标准付与(导出PMX前)", icon='CONSTRAINT')
 

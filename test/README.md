@@ -12,9 +12,9 @@
 打开 `vmd_compare_test.py` → Run Script。
 
 **C. 作为插件子模块**
-插件已装到 `scripts/addons/Convert_to_MMD2/` 时：
+插件已装到 `scripts/addons/Convert_to_MMD5/` 时：
 ```python
-import Convert_to_MMD2.test.vmd_compare_test as t
+import Convert_to_MMD5.test.vmd_compare_test as t
 t.run()
 ```
 
@@ -29,6 +29,16 @@ OUT_DIR = r"E:\mywork"                                                  # 对比
 > 都是**远程 Windows Blender 上的绝对路径**。换机器/换模型时只改这几行。
 > 若不想把真实路径提交到仓库，可把 CONFIG 抽到一个 `test/paths.local.py`
 > （`.gitignore` 已忽略 `*.local.*` 模式中的 local 文件，按需扩展）。
+
+## 本机版:`test_local.py`(macOS / Blender 3.6)
+
+同一套验证逻辑的本机变体,跑在本机 Blender(通过 `mcp__blender-local__execute_blender_code`)。与远端版只差两点:
+
+- CONFIG 走**本地绝对路径**(顶部 4 个占位 `/path/to/convert_test/...`,换素材只改这几行)。
+- 多一个 `COPY_DIR`:macOS 下 `~/Downloads/...` 受 TCC 限制,Claude 的 Bash/Read 读不到(`Operation not permitted`),但 Blender 进程能写。设 `COPY_DIR` 后渲染图会再拷一份到该可读目录,方便 Read 查看;留空则不拷。
+
+跑法与远端版一致:把整段发给 `mcp__blender-local__execute_blender_code`,末尾 `run()` 自动执行。
+重载插件、校验生效引擎(`OBJECT_OT_one_click_convert.__module__ == Convert_to_MMD5.convert.pipeline`)等本机环境约定见仓库 `CLAUDE.md`「本地 Blender(macOS)」小节。
 
 ## 流程（run() 依次调用）
 

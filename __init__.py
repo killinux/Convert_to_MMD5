@@ -1,5 +1,5 @@
 bl_info = {
-    "name": "Convert to MMD 2",
+    "name": "Convert to MMD 5",
     "author": "UITCIS(空想幻灵)",
     "version": (3, 0),
     "blender": (3, 0, 0),

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Convert_to_MMD2 端到端验证脚本：XPS → MMD 一键转换，与参考 PMX 并排，套同一 VMD 对比姿态。
+Convert_to_MMD5 端到端验证脚本：XPS → MMD 一键转换，与参考 PMX 并排，套同一 VMD 对比姿态。
 
 在远程 Blender 里运行（通过 BlenderMCP `send_code_to_blender`，或 Blender 文本编辑器 Run Script）：
 
-    import Convert_to_MMD2.test.vmd_compare_test as t   # 若作为插件子模块
+    import Convert_to_MMD5.test.vmd_compare_test as t   # 若作为插件子模块
     t.run()
 
 或直接把本文件内容整段发给 `mcp__blender__send_code_to_blender`，末尾会自动调用 run()。
@@ -274,7 +274,7 @@ def render_compare(conv_root, pmx_root):
 # ======================================================================
 def run():
     print("=" * 60)
-    print("Convert_to_MMD2  XPS→MMD + VMD 对比测试")
+    print("Convert_to_MMD5  XPS→MMD + VMD 对比测试")
     print("=" * 60)
     check_files()
     clean_scene()

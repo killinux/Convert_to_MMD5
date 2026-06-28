@@ -54,6 +54,18 @@ class OBJECT_OT_rename_to_mmd(bpy.types.Operator):
                 bone.name = new_name
                 setattr(scene, prop_name, new_name)
 
+        # Flush the renames into the evaluated armature. Setting pose_bone.name renames the bone,
+        # but obj.data.bones (the evaluated collection that identify_skeleton / transfer_unused read)
+        # stays on the STALE XPS names until a real recalc — view_layer.update() is NOT enough, a
+        # mode bounce is. Without this, the very next step (transfer_unused, 1.4) routes weight to
+        # the stale XPS bone names and creates parallel stranded vertex groups; the cleanup then
+        # ADD-merges them and the finger/arm rest-pose bake shears the doubled wrist/shoulder weight
+        # into a lump. Bouncing EDIT→OBJECT makes data.bones match pose.bones (= the MMD names).
+        context.view_layer.objects.active = obj
+        bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.object.mode_set(mode='OBJECT')
+
         # Re-detect with MMD names so the chain props match the renamed bones.
         auto_detect_upper_body_chain(scene, obj)
 
