@@ -15,10 +15,10 @@
 - [x] 确认 mmd_tools API：`Model.createRigidBody/createJoint` 可用。
 - [x] 实装 `object.add_skirt_physics`（`convert/skirt.py`），注册 + tab2 第二按钮。
 - [x] 几何验证通过：cartilla 4 链自适应识别 → 16 BOX 刚体贴裙面、1 CAPSULE 锚(下半身)、16 关节在裙骨头部。坑:`shape_type` 是 SPHERE=0/BOX=1/CAPSULE=2(别填错);kinematic 锚 build 后被父级到骨，dump 的 loc 是局部坐标(世界位置正确)。
-- [ ] **下一步**：物理飘动效果测试 —— 转换+裙子物理 → 导入目标 PMX → 缩放等高并排 → 导入 yaoxiang VMD → **bake 刚体模拟** → 渲染对比看飘动。
-  - 关键点:刚体模拟要 bake(顺序模拟，不能跳帧);Blender 刚体对极小物体(米尺度下裙盒~1-2cm)模拟可能不稳，缩到 ~12× 后(~15-25cm)反而更稳——建议在缩放后再 bake。
-  - 需确认 `scene.rigidbody_world` 在 `model.build()` 后就绪，设 point_cache 帧范围后 bake_all。
-- [ ] 调参（宽度估法 / 碰撞 / 限位）到效果满意。
+- [x] **物理飘动效果测试通过**：cartilla 转换+裙子物理 → 导入目标 → 缩放等高(11.92×)并排 → 导入 yaoxiang VMD → bake 刚体 → 渲染。`scene.rigidbody_world` 在 `model.build()` 后自动就绪(17 物体)，设 `point_cache.frame_start/end=1/150` 后 `bpy.ops.ptcache.bake(bake=True)`(temp_override scene+point_cache)成功。f60 渲染:转换模型长裙自然垂坠，与目标一致，用户认可。
+  - 复现:test_local 改 cartilla 素材 + convert 后插 `add_skirt_physics`，import_vmd 后 bake，再 render_compare。缩放后 bake 稳定。
+- [ ] 调参（宽度估法 / 碰撞 / 限位）到效果满意——可选，当前默认值已可用。
+- [ ] 把 bake 流程并进 test_local（目前是手动插的），方便回归。
 
 ### 验证素材（cartilla）
 - SRC_XPS: `/Users/bytedance/Downloads/convert_test/xps/cartilla (white rose)/xps.xps`
