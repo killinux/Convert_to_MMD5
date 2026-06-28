@@ -176,8 +176,13 @@ class OBJECT_PT_skeleton_hierarchy(bpy.types.Panel):
             # 修正前腕=步4、拉直手臂=可选工具、手部权重=步12、设置付与=步14）。
             # 本 tab 改为放衣服与刚体相关处理，具体算子待规划。
             box = layout.box()
-            box.label(text="衣服 / 刚体处理", icon='MOD_CLOTH')
-            box.label(text="（规划中：衣服权重 / 刚体 / 物理）", icon='INFO')
+            box.label(text="衣服权重", icon='MOD_CLOTH')
+            box.operator("object.transfer_clothing_weights", text="衣服权重转移(身体→衣服)", icon='MOD_VERTEX_WEIGHT')
+            box.label(text="先选衣服(可多选)，最后加选身体", icon='INFO')
+
+            box = layout.box()
+            box.label(text="刚体 / 物理（裙子等）", icon='PHYSICS')
+            box.label(text="（规划中：裙骨 / 刚体 / 关节）", icon='INFO')
 
 
 def register():
