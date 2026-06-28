@@ -171,19 +171,13 @@ class OBJECT_PT_skeleton_hierarchy(bpy.types.Panel):
             opt.operator("object.straighten_arms", text="拉直手臂(肘+腕)", icon='BONE_DATA')
 
         else:
+            # 衣服 / 刚体处理。原「次标准骨骼 / XPS 专项修正」全部是 tab1 手动分步的重复，
+            # 已删除（功能仍在 tab1：腿D=步10、捩骨=步11、肩P=步13、转移unused=步3/6、
+            # 修正前腕=步4、拉直手臂=可选工具、手部权重=步12、设置付与=步14）。
+            # 本 tab 改为放衣服与刚体相关处理，具体算子待规划。
             box = layout.box()
-            box.label(text="次标准骨骼", icon='BONE_DATA')
-            box.operator("object.add_leg_d_bones", text="添加腿部D骨骼", icon='BONE_DATA')
-            box.operator("object.add_twist_bone", text="添加捩骨骼", icon='BONE_DATA')
-            box.operator("object.add_shoulder_p_bones", text="添加肩P骨骼", icon='BONE_DATA')
-
-            box = layout.box()
-            box.label(text="XPS 专项修正 / 权重", icon='MODIFIER')
-            box.operator("object.transfer_unused_weights", text="转移 unused 骨权重", icon='MOD_VERTEX_WEIGHT')
-            box.operator("object.fix_forearm_bend", text="修正前腕弯曲", icon='BONE_DATA')
-            box.operator("object.straighten_arms", text="拉直手臂(肘+腕)", icon='BONE_DATA')
-            box.operator("object.fix_palm_weights", text="手部权重修正(拇指+掌骨)", icon='MOD_VERTEX_WEIGHT')
-            box.operator("object.setup_mmd_grants", text="设置标准付与(导出PMX前)", icon='CONSTRAINT')
+            box.label(text="衣服 / 刚体处理", icon='MOD_CLOTH')
+            box.label(text="（规划中：衣服权重 / 刚体 / 物理）", icon='INFO')
 
 
 def register():

@@ -34,7 +34,7 @@ def register():
         name="模式", description="选择操作模式",
         items=[
             ('option1', "主骨骼管理", "预设管理和主骨骼转换操作"),
-            ('option2', "次标准骨骼管理", "次标准骨骼追加"),
+            ('option2', "衣服 / 刚体", "衣服与刚体等的处理"),
         ],
         default='option1')
 
