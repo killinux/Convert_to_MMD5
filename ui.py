@@ -146,6 +146,9 @@ class OBJECT_PT_skeleton_hierarchy(bpy.types.Panel):
             # 1.7 对齐手指 已从流程中删除）。自动识别(上方按钮)算第 0 步。
             box = layout.box()
             box.label(text="手动分步（自动识别后，从上到下依次点）", icon='SORTSIZE')
+            # 0.5 可选：源是 T-Pose 时先转 A-Pose（从 MMD6 移植，上臂绕全局Y倒到~36°+拉直肘）。
+            #     源已是 A-Pose 则跳过。放在归正/重命名之前。
+            box.operator("object.convert_to_apose", text="0.5 转换为 A-Pose（源为T时可选）", icon='OUTLINER_OB_ARMATURE')
             box.operator("object.correct_bones", text="1. 归正骨架位置")
             box.operator("object.rename_to_mmd", text="2. 重命名为 MMD")
             box.operator("object.transfer_unused_weights", text="3. 转移 unused 骨权重 ①")

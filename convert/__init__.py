@@ -11,6 +11,7 @@ from .align import (
     OBJECT_OT_straighten_arms,
     OBJECT_OT_align_arms_to_canonical,
     OBJECT_OT_align_fingers_to_canonical,
+    OBJECT_OT_convert_to_apose,
 )
 from .ik import OBJECT_OT_add_ik
 from .groups import OBJECT_OT_create_bone_group
@@ -35,6 +36,7 @@ _CLASSES = (
     OBJECT_OT_straighten_arms,
     OBJECT_OT_align_arms_to_canonical,
     OBJECT_OT_align_fingers_to_canonical,
+    OBJECT_OT_convert_to_apose,
     OBJECT_OT_add_ik,
     OBJECT_OT_create_bone_group,
     OBJECT_OT_use_mmd_tools_convert,

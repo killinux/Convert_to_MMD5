@@ -576,3 +576,198 @@ class OBJECT_OT_align_fingers_to_canonical(bpy.types.Operator):
             return {'CANCELLED'}
         self.report({'INFO'}, f"手指对齐完成 ({len(plans)} 处)")
         return {'FINISHED'}
+
+
+class OBJECT_OT_convert_to_apose(bpy.types.Operator):
+    """T-Pose → A-Pose（从 Convert_to_MMD6 移植的朴素版）。
+
+    与 align_arms_to_canonical 的区别：本操作不读参考 PMX 实测向量，只把上臂绕*全局 Y*
+    倒到固定目标角(默认 36°)，再把小臂拉直共线、手作为子级跟随，然后 armature_apply
+    把当前姿态确定为新 rest pose。网格用「复制一份骨架修改器 → modifier_apply」烘焙，
+    形态键先退避后复原。是手动可选工具，放在流程最前（自动识别后、重命名前）单独点。
+
+    读取的骨槽与自动识别填的是同一批 scene 属性(left/right_upper_arm_bone、
+    left/right_lower_arm_bone)；找不到该名的骨时回退到 MMD 名(左腕/右腕/左ひじ/右ひじ)，
+    所以重命名前后都能用。"""
+    bl_idname = "object.convert_to_apose"
+    bl_label = "转换为 A-Pose"
+    bl_description = ("把上臂绕全局 Y 倒到目标角(默认 36°)并拉直肘部，烘焙为新 rest pose。"
+                     "源 T-Pose 专用，放在流程最前单独点（自动识别后、重命名前）")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    target_angle: bpy.props.FloatProperty(  # type: ignore
+        name="目标角(度)", description="上臂相对竖直方向倒下的目标角度", default=36.0, min=0.0, max=80.0)
+
+    # scene 骨槽 → 回退用的 MMD 名
+    _ARM_SLOTS = {
+        "left_upper_arm": ("left_upper_arm_bone", "左腕"),
+        "right_upper_arm": ("right_upper_arm_bone", "右腕"),
+        "left_lower_arm": ("left_lower_arm_bone", "左ひじ"),
+        "right_lower_arm": ("right_lower_arm_bone", "右ひじ"),
+    }
+
+    def _resolve(self, scene, obj, slot):
+        """槽位 → 实际骨名：先用 scene 属性里的名，没有就回退 MMD 名。"""
+        prop, mmd = self._ARM_SLOTS[slot]
+        name = getattr(scene, prop, "") or ""
+        if name and name in obj.data.bones:
+            return name
+        if mmd in obj.data.bones:
+            return mmd
+        return ""
+
+    def execute(self, context):
+        obj = context.active_object
+        if not obj or obj.type != 'ARMATURE':
+            self.report({'ERROR'}, "请先选中骨架")
+            return {'CANCELLED'}
+        if not apply_armature_transforms(context, obj):
+            self.report({'ERROR'}, "apply_armature_transforms 失败")
+            return {'CANCELLED'}
+        scene = context.scene
+
+        arm_bones = {k: self._resolve(scene, obj, k) for k in self._ARM_SLOTS}
+        if not (arm_bones["left_upper_arm"] and arm_bones["right_upper_arm"]):
+            self.report({'ERROR'}, "未找到上臂骨：请先自动识别或在槽位里设置 左腕/右腕")
+            return {'CANCELLED'}
+
+        # 形态键退避：烘焙网格前删掉，烘焙后按 delta 复原（保留 morph）
+        def backup_shape_keys(mesh_obj):
+            backup = {}
+            sk = mesh_obj.data.shape_keys
+            if sk and sk.key_blocks:
+                basis = sk.key_blocks[0]
+                for kb in sk.key_blocks[1:]:
+                    affected = {i: v.co - basis.data[i].co
+                                for i, v in enumerate(kb.data) if v.co != basis.data[i].co}
+                    backup[kb.name] = {
+                        'affected': affected,
+                        'relative_key': kb.relative_key.name if kb.relative_key else None,
+                        'slider_min': kb.slider_min, 'slider_max': kb.slider_max,
+                        'mute': kb.mute, 'value': kb.value,
+                    }
+            if sk:
+                for kb in reversed(list(sk.key_blocks)):
+                    mesh_obj.shape_key_remove(kb)
+            return backup
+
+        def restore_shape_keys(mesh_obj, backup):
+            if not backup:
+                return
+            context.view_layer.objects.active = mesh_obj
+            bpy.ops.object.shape_key_add(from_mix=False)
+            new_basis = mesh_obj.data.shape_keys.key_blocks[0]
+            for name, data in backup.items():
+                nk = mesh_obj.shape_key_add(name=name)
+                for i, delta in data['affected'].items():
+                    nk.data[i].co = new_basis.data[i].co + delta
+                nk.slider_min, nk.slider_max = data['slider_min'], data['slider_max']
+                nk.mute, nk.value = data['mute'], data['value']
+                if data['relative_key'] and data['relative_key'] in mesh_obj.data.shape_keys.key_blocks:
+                    nk.relative_key = mesh_obj.data.shape_keys.key_blocks[data['relative_key']]
+
+        meshes, shape_backups = [], {}
+        for m in bpy.data.objects:
+            if m.type == 'MESH':
+                for mod in m.modifiers:
+                    if mod.type == 'ARMATURE' and mod.object == obj:
+                        shape_backups[m.name] = backup_shape_keys(m)
+                        meshes.append(m)
+                        break
+        if not meshes:
+            self.report({'WARNING'}, "未找到绑定该骨架的网格，仅改骨骼")
+
+        # EDIT：上臂尾→小臂头，使上臂精确指向肘
+        bpy.ops.object.mode_set(mode='EDIT')
+        eb = obj.data.edit_bones
+        for u, l in (("left_upper_arm", "left_lower_arm"), ("right_upper_arm", "right_lower_arm")):
+            if arm_bones[u] and arm_bones[l] and arm_bones[u] in eb and arm_bones[l] in eb:
+                eb[arm_bones[u]].tail = eb[arm_bones[l]].head
+
+        # 复制一份骨架修改器，待会儿 apply 它来把姿态烘焙进网格（保留原修改器）
+        for m in meshes:
+            for mod in list(m.modifiers):
+                if mod.type == 'ARMATURE' and mod.object == obj and "_apose_copy" not in mod.name:
+                    nm = m.modifiers.new(name=mod.name + "_apose_copy", type='ARMATURE')
+                    nm.object = mod.object
+                    nm.use_vertex_groups = mod.use_vertex_groups
+                    nm.use_bone_envelopes = mod.use_bone_envelopes
+                    break
+
+        # POSE：清空姿态，把上臂绕全局 Y 倒到 target_angle
+        context.view_layer.objects.active = obj
+        bpy.ops.object.mode_set(mode='POSE')
+        bpy.ops.pose.select_all(action='SELECT')
+        bpy.ops.pose.rot_clear(); bpy.ops.pose.scale_clear(); bpy.ops.pose.loc_clear()
+        bpy.ops.pose.select_all(action='DESELECT')
+
+        pose_bones = obj.pose.bones
+        data_bones = obj.data.bones
+        for slot in ("left_upper_arm", "right_upper_arm"):
+            name = arm_bones[slot]
+            if not name or name not in pose_bones or name not in data_bones:
+                continue
+            pb = pose_bones[name]
+            edit_bone = data_bones[name]
+            pb.rotation_mode = 'XYZ'
+            vec = edit_bone.head_local - edit_bone.tail_local
+            euler = vec.to_track_quat('Z', 'Y').to_euler('XYZ')
+            angle_diff = math.degrees(euler.x) - self.target_angle
+            pb.rotation_euler = (0, 0, 0)
+            bpy.ops.pose.select_all(action='DESELECT')
+            pb.bone.select = True
+            data_bones.active = pb.bone
+            val = math.radians(-angle_diff if slot == "left_upper_arm" else angle_diff)
+            bpy.ops.transform.rotate(value=val, orient_axis='Y', orient_type='GLOBAL')
+        context.view_layer.update()
+
+        # 拉直肘：小臂方向旋到与大臂共线，绕肘关节(小臂头)；手作为子级跟随
+        def _straighten_elbow(upper, lower):
+            pu, pl = pose_bones.get(upper), pose_bones.get(lower)
+            if not pu or not pl:
+                return None
+            d_u, d_l = pu.vector.normalized(), pl.vector.normalized()
+            ang = math.degrees(d_l.angle(d_u))
+            if ang < 0.5:
+                return None
+            rot = d_l.rotation_difference(d_u).to_matrix().to_4x4()
+            mat = pl.matrix.copy()
+            head_loc = mat.to_translation()
+            new_mat = rot @ mat
+            new_mat.translation = head_loc
+            pl.matrix = new_mat
+            context.view_layer.update()
+            return ang
+
+        straightened = []
+        for u, l in (("left_upper_arm", "left_lower_arm"), ("right_upper_arm", "right_lower_arm")):
+            a = _straighten_elbow(arm_bones.get(u, ""), arm_bones.get(l, ""))
+            if a is not None:
+                straightened.append(f"{arm_bones[l]}({a:.1f}°)")
+
+        # apply 复制的修改器把姿态焼进网格，再复原形态键
+        try:
+            for m in meshes:
+                context.view_layer.objects.active = m
+                bpy.ops.object.mode_set(mode='OBJECT')
+                for mod in list(m.modifiers):
+                    if mod.type == 'ARMATURE' and mod.object == obj and "_apose_copy" in mod.name:
+                        bpy.ops.object.modifier_apply(modifier=mod.name)
+                        break
+                if m.name in shape_backups:
+                    restore_shape_keys(m, shape_backups[m.name])
+        except RuntimeError as e:
+            self.report({'ERROR'}, f"应用修改器出错：{e}")
+            return {'CANCELLED'}
+
+        # 当前姿态 → 新 rest pose
+        context.view_layer.objects.active = obj
+        bpy.ops.object.mode_set(mode='POSE')
+        bpy.ops.pose.armature_apply()
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        msg = f"A-Pose 转换完成 (目标 {self.target_angle:.0f}°)"
+        if straightened:
+            msg += " | 拉直肘: " + ", ".join(straightened)
+        self.report({'INFO'}, msg)
+        return {'FINISHED'}
