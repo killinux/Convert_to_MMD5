@@ -120,19 +120,25 @@ def _joint_frame(seg_vec, center, center_xy):
     return Matrix((x, y, zb)).transposed().to_euler('YXZ')
 
 
+def _capsule_frame(vec):
+    """胶囊朝向:mmd_tools 的胶囊网格长轴是本地 Z(不是 Y;实测 dimensions
+    恒为 (2r, 2r, h+2r)),经 B_Z→PMX_Y 映射后正好是 PMX 胶囊的 Y 长轴。
+    所以沿骨方向必须放本地 Z;胶囊绕长轴旋转对称,X/Y 取稳定正交基即可。"""
+    z = vec.normalized() if vec.length > 1e-6 else Vector((0, 0, 1))
+    ref = Vector((1, 0, 0)) if abs(z.x) < 0.9 else Vector((0, 0, 1))
+    y = z.cross(ref).normalized()
+    x = y.cross(z).normalized()
+    return Matrix((x, y, z)).transposed().to_euler('YXZ')
+
+
 def _bone_frame(arm, bone):
-    """骨骼自身几何:返回 (head_w, vec_w, length, euler)。Y 沿骨。"""
+    """骨骼自身几何:返回 (head_w, vec_w, length, euler)。euler 为胶囊系(Z 沿骨)。"""
     mw = arm.matrix_world
     h = mw @ bone.head_local
     t = mw @ bone.tail_local
     vec = t - h
     length = vec.length or 0.05
-    y = vec.normalized() if vec.length > 1e-6 else Vector((0, 0, 1))
-    ref = Vector((1, 0, 0)) if abs(y.x) < 0.9 else Vector((0, 0, 1))
-    z = y.cross(ref).normalized()
-    x = z.cross(y).normalized()
-    mat = Matrix((x, y, z)).transposed()
-    return h, vec, length, mat.to_euler('YXZ')
+    return h, vec, length, _capsule_frame(vec)
 
 
 def _existing_rigids():
@@ -283,14 +289,10 @@ class OBJECT_OT_add_skirt_physics(bpy.types.Operator):
             group = (_GROUP_NEAR if (_cloth_depth(b) <= 1
                      or _near_body(head + vec * 0.5, _hd)) else _GROUP)
 
-            # 段坐标系(刚体与关节共用):Y 沿骨
+            # 段坐标系:发胶囊 Z 沿骨(胶囊长轴约定),布箱 Y 沿骨
             if is_hair:
                 length = vec.length
-                y = vec.normalized()
-                ref = Vector((1, 0, 0)) if abs(y.x) < 0.9 else Vector((0, 0, 1))
-                z = y.cross(ref).normalized()
-                x = z.cross(y).normalized()
-                euler = Matrix((x, y, z)).transposed().to_euler('YXZ')
+                euler = _capsule_frame(vec)
             else:
                 center, euler, half_len = _box_frame(head, vec, center_xy)
 
@@ -367,20 +369,32 @@ class OBJECT_OT_add_skirt_physics(bpy.types.Operator):
 # 身体碰撞刚体
 # ---------------------------------------------------------------------------
 
-# (骨名, 形状 0=SPHERE 2=CAPSULE, 无权重时的半径/骨长比, 量半径用的顶点组)
+# (骨名, 形状 0=SPHERE 2=CAPSULE, 无权重时的半径/骨长比, 量半径用的顶点组, 半径口径, 横放)
 # 腿用 FK 骨(足→ひざ 段有真实长度；足D 是竖直短桩,沿它建胶囊盖不住腿)，
 # 但顶点组在 D 骨名下，所以量半径的 VG 单独给。
+# 半径口径(对照 Bishojou Jason Inase 手调刚体逐部位标定):
+#   "min"  内接窄向(扇区最小)——带独立骨凸起(乳/臀有专属 jiggle 骨,参考给乳房
+#          单独 g15 零碰撞刚体,不计入胸围)或强椭圆的躯干/头颈,外接会超标 1.4~1.8×;
+#   "mid"  扇区中位数(典型方向粗度)——大腿:饰带/臀部过渡只抬高个别扇区,
+#          全局分位会被单向凸起带偏 +10%,臀后上方由横放的下半身刚体负责;
+#   "circ" 外接圆(全局分位)——小腿/手臂和肋廓,截面近圆,且布必须整圈包不进肉
+#          (裙不能陷进小腿肚;膝→踝骨轴贴胫前皮,取 min 会瘦到胫前距 0.5×)。
+# 横放(horiz=True,躯干):参考的下半身/上半身系胶囊全部长轴沿世界 X(rot.z=90°),
+# 圆截面管前后/上下,长轴撑左右宽——竖放只能盖 ±r 宽,裙侧会陷进胯侧才碰到。
 _BODY_DEFS = [
-    ("頭", 0, 0.55, ()),
-    ("首", 2, 0.35, ()),
-    ("上半身3", 2, 0.90, ()),
-    ("上半身2", 2, 0.90, ()),
-    ("上半身", 2, 0.95, ()),
-    ("下半身", 2, 0.95, ()),
-    ("左足", 2, 0.30, ("左足D",)), ("右足", 2, 0.30, ("右足D",)),
-    ("左ひざ", 2, 0.28, ("左ひざD",)), ("右ひざ", 2, 0.28, ("右ひざD",)),
-    ("左腕", 2, 0.25, ()), ("右腕", 2, 0.25, ()),
-    ("左ひじ", 2, 0.22, ()), ("右ひじ", 2, 0.22, ()),
+    ("頭", 0, 0.55, (), "min", False),
+    ("首", 2, 0.35, (), "min", False),
+    ("上半身3", 2, 0.90, (), "min", True),
+    ("上半身2", 2, 0.90, (), "circ", True),
+    ("上半身", 2, 0.95, (), "min", True),
+    ("下半身", 2, 0.95, (), "min", True),
+    # 肩:参考单独给横放肩刚体盖腋下~三角肌宽度(胸侧最宽处权重在肩上,
+    # 上半身3 的区域到肩即截断,量不到);肩骨本身指向外侧,沿骨即横放。
+    ("左肩", 2, 0.60, (), "circ", False), ("右肩", 2, 0.60, (), "circ", False),
+    ("左足", 2, 0.30, ("左足D",), "mid", False), ("右足", 2, 0.30, ("右足D",), "mid", False),
+    ("左ひざ", 2, 0.28, ("左ひざD",), "circ", False), ("右ひざ", 2, 0.28, ("右ひざD",), "circ", False),
+    ("左腕", 2, 0.25, (), "circ", False), ("右腕", 2, 0.25, (), "circ", False),
+    ("左ひじ", 2, 0.22, (), "circ", False), ("右ひじ", 2, 0.22, (), "circ", False),
 ]
 
 
@@ -390,8 +404,35 @@ def _skinned_meshes(arm):
             and any(m.type == 'ARMATURE' and m.object == arm for m in o.modifiers)]
 
 
-def _measured_radius(arm, meshes, bone_name, vg_names=(), pct=0.85):
-    """按顶点组(权重>0.3)顶点到骨轴的径向距离取分位数，估碰撞半径。"""
+# 区域展开的截止名:其他身体刚体的目标骨/顶点组 + 肩/手首,防止跨部位串权重
+_REGION_STOP = frozenset(
+    [d[0] for d in _BODY_DEFS]
+    + [v for d in _BODY_DEFS for v in d[3]]
+    + ["左肩", "右肩", "左手首", "右手首"])
+
+
+def _region_names(arm, seeds):
+    """种子骨 + 其后代 helper 骨的名字集(在别的身体骨/肩/布/发骨处截断)。
+    精简路线不转移权重,蒙皮常留在源 helper 骨(pelvis/foretwist/大腿twist)上,
+    只查 MMD 名顶点组会测空;按层级把区域内 helper 一并纳入,位置驱动、无魔数。"""
+    out = set(seeds)
+    stack = [b for b in (arm.data.bones.get(n) for n in seeds) if b]
+    while stack:
+        for c in stack.pop().children:
+            n = c.name
+            if n in _REGION_STOP or CLOTH_RE.search(n) or HAIR_RE.search(n):
+                continue
+            if n not in out:
+                out.add(n)
+                stack.append(c)
+    return out
+
+
+def _measured_radius(arm, meshes, bone_name, vg_names=(), pct=0.85, mode="circ"):
+    """区域顶点组(权重>0.3)顶点绕骨轴分 8 个方位扇区,每扇区取径向距离的分位数。
+    mode="min" → 各扇区最小(内接窄向:胸→背侧、胯→腹侧,乳/臀/饰物只抬高
+    个别扇区、被 min 淘汰);"mid" → 扇区中位数(典型方向粗度,免疫单向凸起);
+    "circ" → 全局分位数(外接圆)。口径按部位选,依据见 _BODY_DEFS 注释。"""
     bone = arm.data.bones.get(bone_name)
     if not bone:
         return None
@@ -400,8 +441,12 @@ def _measured_radius(arm, meshes, bone_name, vg_names=(), pct=0.85):
     axis = (mw @ bone.tail_local) - h
     L = axis.length or 1e-6
     axis_n = axis / L
-    names = set(vg_names) or {bone_name}
-    dists = []
+    ref = Vector((1, 0, 0)) if abs(axis_n.x) < 0.9 else Vector((0, 0, 1))
+    u = axis_n.cross(ref).normalized()
+    w = axis_n.cross(u)
+    names = _region_names(arm, {bone_name} | set(vg_names))
+    sectors = [[] for _ in range(8)]
+    total = 0
     for m in meshes:
         gis = {vg.index for vg in m.vertex_groups if vg.name in names}
         if not gis:
@@ -411,14 +456,49 @@ def _measured_radius(arm, meshes, bone_name, vg_names=(), pct=0.85):
             for g in v.groups:
                 if g.group in gis and g.weight > 0.3:
                     rel = (mmw @ v.co) - h
-                    r = (rel - axis_n * rel.dot(axis_n)).length
-                    dists.append(r)
+                    rad = rel - axis_n * rel.dot(axis_n)
+                    k = int((math.atan2(rad.dot(w), rad.dot(u)) + math.pi)
+                            / (2.0 * math.pi) * 8.0) % 8
+                    sectors[k].append(rad.length)
+                    total += 1
                     break
-    if len(dists) < 8:
+    if total < 8:
         return None
-    dists.sort()
-    r = dists[min(len(dists) - 1, int(len(dists) * pct))]
+    per = sorted(s[min(len(s) - 1, int(len(s) * pct))] for s in map(sorted, sectors)
+                 if len(s) >= 8)
+    if mode in ("min", "mid") and len(per) >= 4:
+        r = per[0] if mode == "min" else per[len(per) // 2]
+    else:                       # circ 口径,或顶点组只盖住局部弧面扇区不足
+        alld = sorted(d for s in sectors for d in s)
+        r = alld[min(len(alld) - 1, int(len(alld) * pct))]
     return min(max(r, 0.015), L * 1.5)
+
+
+def _lateral_semi(arm, meshes, bone_name, vg_names=(), pct=0.95):
+    """横放胶囊的半宽:区域顶点(权重>0.3)|x−骨中点x| 的分位数(乳/臀凸起
+    只加深前后向,不影响 |dx|,宽度量得干净)。侧面就是垂布的接触面,
+    取 p95 贴近最宽处(p85 会砍掉胯侧/腋侧的窄条顶点带,偏窄 ~13%)。"""
+    bone = arm.data.bones.get(bone_name)
+    if not bone:
+        return None
+    mw = arm.matrix_world
+    cx = (mw @ ((bone.head_local + bone.tail_local) * 0.5)).x
+    names = _region_names(arm, {bone_name} | set(vg_names))
+    dxs = []
+    for m in meshes:
+        gis = {vg.index for vg in m.vertex_groups if vg.name in names}
+        if not gis:
+            continue
+        mmw = m.matrix_world
+        for v in m.data.vertices:
+            for g in v.groups:
+                if g.group in gis and g.weight > 0.3:
+                    dxs.append(abs((mmw @ v.co).x - cx))
+                    break
+    if len(dxs) < 8:
+        return None
+    dxs.sort()
+    return dxs[min(len(dxs) - 1, int(len(dxs) * pct))]
 
 
 class OBJECT_OT_add_body_rigids(bpy.types.Operator):
@@ -457,18 +537,23 @@ class OBJECT_OT_add_body_rigids(bpy.types.Operator):
         meshes = _skinned_meshes(arm)
         existing = _existing_rigids()
         n = 0
-        for bone_name, shape, fb_ratio, vg_names in _BODY_DEFS:
+        for bone_name, shape, fb_ratio, vg_names, rmode, horiz in _BODY_DEFS:
             bone = arm.data.bones.get(bone_name)
             if not bone or bone_name in existing:
                 continue
             h, vec, length, euler = _bone_frame(arm, bone)
-            r = _measured_radius(arm, meshes, bone_name, vg_names) or (length * fb_ratio)
+            r, src = _measured_radius(arm, meshes, bone_name, vg_names, mode=rmode), "vg"
+            if r is None:
+                r, src = length * fb_ratio, "fb"
+            loc = h + vec * 0.5
             if shape == 0:      # SPHERE
                 size = (r, 0.0, 0.0)
-                loc = h + vec * 0.5
-            else:               # CAPSULE:height 扣掉两端半球，避免总长超出
+            elif horiz:         # 躯干横放:长轴世界 X,半宽实测,圆截面管前后/上下
+                euler = _capsule_frame(Vector((1.0, 0.0, 0.0)))
+                wsemi = _lateral_semi(arm, meshes, bone_name, vg_names)
+                size = (r, max(0.01, 2.0 * (wsemi - r)) if wsemi else length, 0.0)
+            else:               # 沿骨:height 扣掉两端半球，避免总长超出
                 size = (r, max(length * 0.35, length - r), 0.0)
-                loc = h + vec * 0.5
             rigid = model.createRigidBody(
                 shape_type=shape, location=loc, rotation=euler, size=size,
                 dynamics_type=_DYN_STATIC,
@@ -479,7 +564,8 @@ class OBJECT_OT_add_body_rigids(bpy.types.Operator):
             existing[bone_name] = rigid
             n += 1
             print(f"[body-rigid] {bone_name}: shape={'SPHERE' if shape==0 else 'CAPSULE'} "
-                  f"r={r:.3f} len={length:.3f}")
+                  f"r={r:.3f}({src},{rmode}{',横' if horiz else ''}) len={length:.3f} "
+                  f"h={size[1]:.3f}")
 
         # 同布物理:不 build()，避免导出前物理求值污染绑定位。
 
