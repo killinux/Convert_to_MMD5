@@ -203,7 +203,14 @@ class OBJECT_OT_add_leg_d_bones(bpy.types.Operator):
         n = 0
         for d_name, src_name, parent_name in self._D_CHAIN:
             src = eb.get(src_name)
-            parent = eb.get(parent_name)
+            # 足D shares 足's actual parent (腰キャンセル when present, else 下半身):
+            # hardcoding 下半身 puts the D chain outside the waist-cancel frame, so a
+            # 腰 rotation moves the leg mesh (D-carried) away from the IK-pinned FK
+            # chain — feet drift and anything still FK-parented shears off mid-leg.
+            if src_name in ("右足", "左足") and src and src.parent:
+                parent = src.parent
+            else:
+                parent = eb.get(parent_name)
             if not src or not parent:
                 continue
             d = eb.get(d_name) or eb.new(d_name)
@@ -213,6 +220,25 @@ class OBJECT_OT_add_leg_d_bones(bpy.types.Operator):
             d.parent = parent
             d.use_deform = True
             n += 1
+
+        # Non-chain children of 足/ひざ/足首 (preserved leg-twist helpers etc.) move to
+        # the D bone, mirroring the PMXE 準標準 plugin. They carry skin weight, and the
+        # FK chain they'd otherwise ride diverges from the D chain the rest of the mesh
+        # follows (腰キャンセル sits only on the FK side) — the mesh shears apart at the
+        # weight boundary the moment 腰 rotates.
+        _next_chain = {"右足": "右ひざ", "右ひざ": "右足首", "左足": "左ひざ", "左ひざ": "左足首",
+                       "右足首": None, "左足首": None}
+        for d_name, src_name, _ in self._D_CHAIN:
+            src, d = eb.get(src_name), eb.get(d_name)
+            if not src or not d:
+                continue
+            for ch in list(src.children):
+                if ch.name == d_name or ch.name == _next_chain[src_name]:
+                    continue
+                if 'ＩＫ' in ch.name or 'IK' in ch.name or ch.name.startswith('_'):
+                    continue
+                ch.use_connect = False
+                ch.parent = d
         # toe-EX reparents under 足首D
         for toe_name, parent_name in self._TOE:
             toe = eb.get(toe_name)

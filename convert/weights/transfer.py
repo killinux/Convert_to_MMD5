@@ -18,6 +18,23 @@ from .common import skinned_meshes
 from ...skeleton_identifier import identify_skeleton
 from ...helper_classifier import classify_helpers
 from ...skeleton_identifier import clear_cache
+from ...presets import get_bones_list
+from ..skirt import CLOTH_RE, HAIR_RE
+
+
+def _slot_skeleton_map(scene, armature_data):
+    """Skeleton map from the pipeline's scene bone slots — the single source of
+    truth (preset- or step-0-identify-filled, kept current by rename). The
+    internal topology re-identify below is only a fallback: on rigs whose
+    geometry fools it (e.g. cartilla's coat/wheel noise bones make legs read as
+    arms) it silently disagreed with the slots the rest of the pipeline used,
+    and leg-twist weight got routed into the wrong leg segment."""
+    smap = {}
+    for prop in get_bones_list():
+        name = getattr(scene, prop, "") or ""
+        if name and name in armature_data.bones:
+            smap[prop] = name
+    return smap if len(smap) >= 5 else None
 
 
 # Deltoid (shoulder-cap) routing ramp along the 腕→ひじ axis (t=0 arm head/shoulder
@@ -38,21 +55,22 @@ def deltoid_shoulder_fraction(t):
     return (DELTOID_SH_T_HI - t) / (DELTOID_SH_T_HI - DELTOID_SH_T_LO)
 
 
-def _detect_arm_deltoid(obj, meshes, candidates):
+def _detect_arm_deltoid(obj, meshes, candidates, slot_map=None):
     """Identify shoulder-cap helper bones (e.g. XPS xtra07/xtra07pp) and return
     {bone_name: (肩名, 腕名, origin, axis, L2)} so transfer can split them by
     position along the 腕→ひじ axis.
 
-    Arm bones are resolved by topology (identify_skeleton), not Japanese names:
-    the first transfer pass runs *before* rename, while bones still carry XPS
-    names — a hard 左腕/左ひじ lookup would miss. identify_skeleton is name-agnostic
-    and routes to the shoulder bone's *current* name; when complete later renames
-    that bone to 左肩, the vertex group rides along.
+    Arm bones come from the scene slot map when the pipeline filled it (names
+    stay current — rename updates the slots); topology identify_skeleton is the
+    fallback for out-of-pipeline runs. Either way the lookup is by *current*
+    name, so pre-rename XPS names and post-rename MMD names both resolve.
     """
-    try:
-        smap = identify_skeleton(obj.data)
-    except Exception:
-        smap = {}
+    smap = slot_map
+    if smap is None:
+        try:
+            smap = identify_skeleton(obj.data)
+        except Exception:
+            smap = {}
     mw = obj.matrix_world
     sides = []  # (origin, axis, L2, armlen, shoulder_name, arm_name)
     for side, jp in (('left', '左'), ('right', '右')):
@@ -129,10 +147,12 @@ class OBJECT_OT_transfer_unused_weights(bpy.types.Operator):
         '左人指０', '右人指０', '左中指０', '右中指０', '左薬指０', '右薬指０', '左小指０', '右小指０',
     ))
 
-    def _auto_classify(self, armature):
+    def _auto_classify(self, armature, slot_map=None):
         try:
-            clear_cache()
-            smap = identify_skeleton(armature.data)
+            smap = slot_map
+            if smap is None:
+                clear_cache()
+                smap = identify_skeleton(armature.data)
             if sum(1 for v in smap.values() if v) < 5:
                 return None
             return classify_helpers(armature.data, smap)
@@ -150,7 +170,8 @@ class OBJECT_OT_transfer_unused_weights(bpy.types.Operator):
             self.report({'ERROR'}, "未找到挂此 armature 的 mesh")
             return {'CANCELLED'}
 
-        cls = self._auto_classify(obj)
+        slot_map = _slot_skeleton_map(context.scene, obj.data)
+        cls = self._auto_classify(obj, slot_map)
 
         if cls:
             # "unused*" are XPS helper leftovers. Bones the classifier calls
@@ -165,6 +186,10 @@ class OBJECT_OT_transfer_unused_weights(bpy.types.Operator):
                 if (cls.get(b.name) == 'merge'
                     or (b.name.startswith('unused') and cls.get(b.name) in ('twist', 'other')))
                 and b.name not in self.STANDARD_MMD_BONES
+                # 具名布/发骨(hangings/shawl/裙/发链等)保留权重给布物理——分类器会把
+                # 居中的脊柱系饰骨判成 merge,合并后布刚体就没意义了
+                and not (not b.name.startswith('unused')
+                         and (CLOTH_RE.search(b.name) or HAIR_RE.search(b.name)))
             ]
             control_bones = [b for b in obj.data.bones if b.name in self.CONTROL_BONES]
             print("\n[Transfer unused] 使用 auto-classifier")
@@ -178,12 +203,16 @@ class OBJECT_OT_transfer_unused_weights(bpy.types.Operator):
             print("\n[Transfer unused] 使用硬编码 patterns (fallback)")
 
         bones_to_transfer = unused_bones + control_bones
+        transfer_names = {b.name for b in bones_to_transfer}
         valid_deform_bones = [
             b for b in obj.data.bones
             if not b.name.startswith('unused')
             and not b.name.startswith('_shadow')
             and not b.name.startswith('_dummy')
             and b.use_deform
+            # 不能把权重转给正在被清空的骨(最近骨常是它自己):
+            # 自转移 → 顶点组删除 → 权重湮灭 → 导出后兜底绑 全ての親(乱套元凶)
+            and b.name not in transfer_names
         ]
         if not valid_deform_bones:
             self.report({'ERROR'}, "无有效变形骨")
@@ -193,7 +222,7 @@ class OBJECT_OT_transfer_unused_weights(bpy.types.Operator):
 
         # Deltoid (shoulder cap): split by position to 肩 (top) / 腕 (lower) base —
         # reproduce the target hand-off instead of dumping the whole cap to one bone.
-        deltoid_dest = _detect_arm_deltoid(obj, mesh_objects, bones_to_transfer)
+        deltoid_dest = _detect_arm_deltoid(obj, mesh_objects, bones_to_transfer, slot_map)
         if deltoid_dest:
             print(f"[Transfer unused] 三角肌按位置分肩/腕: { {k: (v[0], v[1]) for k, v in deltoid_dest.items()} }")
 
