@@ -9,7 +9,18 @@ import bpy
 # Bump this on every code update so you can SEE in the panel that Blender actually
 # reloaded the new code (Blender caches Python modules — a stale build means the
 # addon was not re-enabled/restarted). 改动后改这里。
-BUILD_STAMP = "build 2026-06-28 16:04:07"
+BUILD_STAMP = "build 2026-07-05 left-align"
+
+
+def _step_btn(box, idname, text, icon=None, off=False):
+    """清单式按钮:左对齐(Blender 按钮文字默认居中且不可改,惯用做法是
+    row.alignment='LEFT' 让按钮收缩为文字宽、贴左排列)。
+    off=True 时变灰停用并标注(精简路线的权重步),编号保留以便对照标准路线。"""
+    row = box.row(align=True)
+    row.alignment = 'LEFT'
+    row.enabled = not off
+    kw = {"icon": icon} if icon else {}
+    row.operator(idname, text=text + ("(精简:跳过)" if off else ""), **kw)
 
 
 def _bone_row(layout, scene, obj, label_text, prop_name):
@@ -89,11 +100,22 @@ class OBJECT_PT_skeleton_hierarchy(bpy.types.Panel):
         row.prop(scene, "my_enum", expand=True)
 
         if scene.my_enum == 'option1':
+            # 转换路线:标准=重建权重(全流程) / 精简=保源权重(权重四步 3/6/11/12 停用)。
+            # 一键按钮与下方手动分步都跟随此开关。
+            row = layout.row(align=True)
+            row.prop(scene, "convert_route", expand=True)
+            minimal = scene.convert_route == 'MINIMAL'
+
             box = layout.box()
             box.label(text="自动 / 一键", icon='AUTO')
             r = box.row(align=True)
             r.scale_y = 1.35
-            r.operator("object.one_click_convert", text="一键转换 XPS→MMD", icon='PLAY')
+            op = r.operator(
+                "object.one_click_convert",
+                text=("一键转换 XPS→MMD(精简·保源权重)" if minimal
+                      else "一键转换 XPS→MMD(标准)"),
+                icon='PLAY')
+            op.minimal = minimal
             box.operator("object.auto_identify_skeleton", text="自动识别骨架（填充下方槽位）", icon='ZOOM_SELECTED')
 
             r = layout.row(align=True)
@@ -145,30 +167,33 @@ class OBJECT_PT_skeleton_hierarchy(bpy.types.Panel):
             # 手动分步：按编号从上到下依次点，即可复现「一键转换」的全流程（1.6 对齐手臂 /
             # 1.7 对齐手指 已从流程中删除）。自动识别(上方按钮)算第 0 步。
             box = layout.box()
-            box.label(text="手动分步（自动识别后，从上到下依次点）", icon='SORTSIZE')
+            if minimal:
+                box.label(text="手动分步 — 精简路线:保源权重,3/6/11/12 停用", icon='LOCKED')
+            else:
+                box.label(text="手动分步 — 标准路线（自动识别后，从上到下依次点）", icon='SORTSIZE')
             # 0.5 可选：源是 T-Pose 时先转 A-Pose（从 MMD6 移植，上臂绕全局Y倒到~36°+拉直肘）。
             #     源已是 A-Pose 则跳过。放在归正/重命名之前。
-            box.operator("object.convert_to_apose", text="0.5 转换为 A-Pose（源为T时可选）", icon='OUTLINER_OB_ARMATURE')
-            box.operator("object.correct_bones", text="1. 归正骨架位置")
-            box.operator("object.rename_to_mmd", text="2. 重命名为 MMD")
-            box.operator("object.transfer_unused_weights", text="3. 转移 unused 骨权重 ①")
-            box.operator("object.fix_forearm_bend", text="4. 修正前腕弯曲")
-            box.operator("object.complete_missing_bones", text="5. 补全缺失骨骼")
-            box.operator("object.transfer_unused_weights", text="6. 转移 unused 骨权重 ②")
-            box.operator("object.add_mmd_ik", text="7. 添加 MMD IK")
-            box.operator("object.create_bone_group", text="8. 创建骨骼集合")
-            box.operator("object.use_mmd_tools_convert", text="9. 使用 mmd_tools 转换格式")
+            _step_btn(box, "object.convert_to_apose", "0.5 转换为 A-Pose（源为T时可选）", icon='OUTLINER_OB_ARMATURE')
+            _step_btn(box, "object.correct_bones", "1. 归正骨架位置")
+            _step_btn(box, "object.rename_to_mmd", "2. 重命名为 MMD")
+            _step_btn(box, "object.transfer_unused_weights", "3. 转移 unused 骨权重 ①", off=minimal)
+            _step_btn(box, "object.fix_forearm_bend", "4. 修正前腕弯曲")
+            _step_btn(box, "object.complete_missing_bones", "5. 补全缺失骨骼")
+            _step_btn(box, "object.transfer_unused_weights", "6. 转移 unused 骨权重 ②", off=minimal)
+            _step_btn(box, "object.add_mmd_ik", "7. 添加 MMD IK")
+            _step_btn(box, "object.create_bone_group", "8. 创建骨骼集合")
+            _step_btn(box, "object.use_mmd_tools_convert", "9. 使用 mmd_tools 转换格式")
             box.label(text="—— 上为转换前 / 下为转换后 ——", icon='DOT')
-            box.operator("object.add_leg_d_bones", text="10. 添加腿部 D 骨骼")
-            box.operator("object.add_twist_bone", text="11. 添加捩骨骼")
-            box.operator("object.fix_palm_weights", text="12. 手部权重修正(拇指+掌骨)")
-            box.operator("object.add_shoulder_p_bones", text="13. 添加肩P骨骼")
-            box.operator("object.setup_mmd_grants", text="14. 设置标准付与")
-            box.operator("mmd_tools.apply_additional_transform", text="15. 应用付与变换")
+            _step_btn(box, "object.add_leg_d_bones", "10. 添加腿部 D 骨骼")
+            _step_btn(box, "object.add_twist_bone", "11. 添加捩骨骼", off=minimal)
+            _step_btn(box, "object.fix_palm_weights", "12. 手部权重修正(拇指+掌骨)", off=minimal)
+            _step_btn(box, "object.add_shoulder_p_bones", "13. 添加肩P骨骼")
+            _step_btn(box, "object.setup_mmd_grants", "14. 设置标准付与")
+            _step_btn(box, "mmd_tools.apply_additional_transform", "15. 应用付与变换")
 
             opt = layout.box()
             opt.label(text="可选工具（不在流程内）", icon='TOOL_SETTINGS')
-            opt.operator("object.straighten_arms", text="拉直手臂(肘+腕)", icon='BONE_DATA')
+            _step_btn(opt, "object.straighten_arms", "拉直手臂(肘+腕)", icon='BONE_DATA')
 
         else:
             # 衣服 / 刚体处理。原「次标准骨骼 / XPS 专项修正」全部是 tab1 手动分步的重复，
@@ -177,13 +202,13 @@ class OBJECT_PT_skeleton_hierarchy(bpy.types.Panel):
             # 本 tab 改为放衣服与刚体相关处理，具体算子待规划。
             box = layout.box()
             box.label(text="衣服权重", icon='MOD_CLOTH')
-            box.operator("object.transfer_clothing_weights", text="衣服权重转移(身体→衣服)", icon='MOD_VERTEX_WEIGHT')
+            _step_btn(box, "object.transfer_clothing_weights", "衣服权重转移(身体→衣服)", icon='MOD_VERTEX_WEIGHT')
             box.label(text="先选衣服(可多选)，最后加选身体", icon='INFO')
 
             box = layout.box()
             box.label(text="刚体 / 物理", icon='PHYSICS')
-            box.operator("object.add_body_rigids", text="1. 身体碰撞刚体(自动)", icon='MESH_CAPSULE')
-            box.operator("object.add_skirt_physics", text="2. 布物理: 裙/外套/披风/发(自动)", icon='PHYSICS')
+            _step_btn(box, "object.add_body_rigids", "1. 身体碰撞刚体(自动)", icon='MESH_CAPSULE')
+            _step_btn(box, "object.add_skirt_physics", "2. 布物理: 裙/外套/披风/发(自动)", icon='PHYSICS')
             box.label(text="先建身体刚体再建布物理，布料才不穿身", icon='INFO')
 
 

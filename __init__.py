@@ -37,6 +37,16 @@ def register():
             ('option2', "衣服 / 刚体", "衣服与刚体等的处理"),
         ],
         default='option1')
+    bpy.types.Scene.convert_route = bpy.props.EnumProperty(
+        name="转换路线",
+        description="权重处理策略,判断准则见 docs/操作手册.md「何时跳过步 3/6」",
+        items=[
+            ('FULL', "标准·重建权重",
+             "完整流程:转移 unused 权重并重建捩骨/掌骨。适合源蒙皮一般、helper 骨权重接近零的模型"),
+            ('MINIMAL', "精简·保源权重",
+             "源权重一律不动:停用 3/6/11/12。适合 helper 骨真实承重(foretwist/pelvis 有大权重)、具名饰骨密集的模型"),
+        ],
+        default='FULL')
 
 
 def unregister():
@@ -47,7 +57,7 @@ def unregister():
     presets.unregister()
     properties.unregister_properties(properties.get_registered_props())
 
-    for prop in ("preset_enum", "my_enum"):
+    for prop in ("preset_enum", "my_enum", "convert_route"):
         if hasattr(bpy.types.Scene, prop):
             delattr(bpy.types.Scene, prop)
 

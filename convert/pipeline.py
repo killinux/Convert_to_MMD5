@@ -49,6 +49,11 @@ PIPELINE_POST_D = [
     ("8", "object.add_shoulder_p_bones", "添加肩P骨", {"finalize": False}, False),
 ]
 
+# 精简路线(保源权重)跳过的权重步:1.4/2.5 转移 unused、7 捩骨切分、7.5 手掌修正。
+# 1.45/VG 清理保留(只把改名搁浅的顶点组并回同一逻辑骨,不算动源权重)。
+# 何时选精简见 docs/操作手册.md「何时跳过步 3/6(转移 unused 骨权重)」。
+MINIMAL_SKIP = frozenset(("1.4", "2.5", "7", "7.5"))
+
 
 def _find_armature():
     for o in bpy.data.objects:
@@ -70,6 +75,9 @@ class OBJECT_OT_one_click_convert(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     auto_identify: bpy.props.BoolProperty(name="自动识别骨架", default=True)  # type: ignore
+    minimal: bpy.props.BoolProperty(  # type: ignore
+        name="精简(保源权重)", default=False,
+        description="跳过转移 unused 权重/捩骨切分/手掌修正,源蒙皮原样保留")
 
     def execute(self, context):
         t_start = time.time()
@@ -97,6 +105,9 @@ class OBJECT_OT_one_click_convert(bpy.types.Operator):
                 xps_to_mmd_map[xps_name] = mmd_name
 
         for step_num, op_id, label, critical in PIPELINE_PRE_D:
+            if self.minimal and step_num in MINIMAL_SKIP:
+                results.append((step_num, label, "SKIP(精简)"))
+                continue
             arm = obj if (obj and obj.name in bpy.data.objects) else _find_armature()
             if arm:
                 context.view_layer.objects.active = arm
@@ -123,6 +134,9 @@ class OBJECT_OT_one_click_convert(bpy.types.Operator):
         self._vg_cleanup(obj, xps_to_mmd_map, results)
 
         for step_num, op_id, label, kwargs, critical in PIPELINE_POST_D:
+            if self.minimal and step_num in MINIMAL_SKIP:
+                results.append((step_num, label, "SKIP(精简)"))
+                continue
             arm = obj if (obj and obj.name in bpy.data.objects) else _find_armature()
             if arm:
                 context.view_layer.objects.active = arm
@@ -158,7 +172,11 @@ class OBJECT_OT_one_click_convert(bpy.types.Operator):
         total = time.time() - t_start
         self._print_summary(results, total)
         ok = sum(1 for _, _, s in results if s.startswith("OK"))
-        self.report({'INFO'}, f"一键转换完成: {ok}/{len(results)} 步成功 ({total:.1f}s)")
+        skipped = sum(1 for _, _, s in results if s.startswith("SKIP"))
+        if skipped:
+            self.report({'INFO'}, f"一键转换完成(精简): {ok}/{len(results) - skipped} 步成功, 跳过 {skipped} 个权重步 ({total:.1f}s)")
+        else:
+            self.report({'INFO'}, f"一键转换完成: {ok}/{len(results)} 步成功 ({total:.1f}s)")
         return {'FINISHED'}
 
     def _vg_cleanup(self, obj, xps_to_mmd_map, results, step="5.5"):
@@ -237,7 +255,14 @@ class OBJECT_OT_one_click_convert(bpy.types.Operator):
         print(f"[Convert_to_MMD] 一键转换结果  ({BUILD_STAMP})")
         print("=" * 60)
         for step, label, status in results:
-            mark = "✓" if status.startswith("OK") else ("⚠" if "WARN" in status else "✗")
+            if status.startswith("OK"):
+                mark = "✓"
+            elif status.startswith("SKIP"):
+                mark = "○"     # 路线主动跳过,不是失败
+            elif "WARN" in status:
+                mark = "⚠"
+            else:
+                mark = "✗"
             print(f"  {mark} Step {step:<5} {label:<28} {status}")
         print(f"\n  总耗时: {total:.1f}s")
         print("=" * 60)
