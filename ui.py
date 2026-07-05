@@ -181,9 +181,10 @@ class OBJECT_PT_skeleton_hierarchy(bpy.types.Panel):
             box.label(text="先选衣服(可多选)，最后加选身体", icon='INFO')
 
             box = layout.box()
-            box.label(text="刚体 / 物理（裙子等）", icon='PHYSICS')
-            box.operator("object.add_skirt_physics", text="裙子刚体/物理(自动)", icon='PHYSICS')
-            box.label(text="复用已有裙骨，自适应识别裙链", icon='INFO')
+            box.label(text="刚体 / 物理", icon='PHYSICS')
+            box.operator("object.add_body_rigids", text="1. 身体碰撞刚体(自动)", icon='MESH_CAPSULE')
+            box.operator("object.add_skirt_physics", text="2. 布物理: 裙/外套/披风/发(自动)", icon='PHYSICS')
+            box.label(text="先建身体刚体再建布物理，布料才不穿身", icon='INFO')
 
 
 def register():

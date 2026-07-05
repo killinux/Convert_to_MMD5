@@ -25,7 +25,7 @@ from .grants import OBJECT_OT_setup_mmd_grants
 from .weights.transfer import OBJECT_OT_transfer_unused_weights
 from .weights.palm import OBJECT_OT_fix_palm_weights
 from .weights.clothing import OBJECT_OT_transfer_clothing_weights
-from .skirt import OBJECT_OT_add_skirt_physics
+from .skirt import OBJECT_OT_add_skirt_physics, OBJECT_OT_add_body_rigids
 from .pipeline import OBJECT_OT_one_click_convert
 
 
@@ -50,6 +50,7 @@ _CLASSES = (
     OBJECT_OT_fix_palm_weights,
     OBJECT_OT_transfer_clothing_weights,
     OBJECT_OT_add_skirt_physics,
+    OBJECT_OT_add_body_rigids,
     OBJECT_OT_one_click_convert,
 )
 
