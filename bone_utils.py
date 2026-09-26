@@ -82,13 +82,27 @@ def calculate_skeleton_height(edit_bones):
     return max_z - min_z
 
 
+def _mesh_height(armature_data):
+    """挂这个骨架的蒙皮网格在骨架局部 Z 上的跨度;没有网格返回 None。"""
+    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE' and o.data == armature_data), None)
+    if arm is None:
+        return None
+    inv = arm.matrix_world.inverted()
+    zs = []
+    for o in bpy.data.objects:
+        if o.type == 'MESH' and any(m.type == 'ARMATURE' and m.object == arm for m in o.modifiers):
+            mw = inv @ o.matrix_world
+            zs.extend((mw @ v.co).z for v in o.data.vertices)
+    return (max(zs) - min(zs)) if zs else None
+
+
 def calculate_bone_length(edit_bones):
-    """计算骨架高度并返回八分之一骨架高度作为bone_length"""
-    # 获取骨架高度
-    skeleton_height = calculate_skeleton_height(edit_bones)
-    # 定义八分之一骨架高度
-    bone_length = skeleton_height * 0.125
-    return bone_length
+    """八分之一身高作为 bone_length(センター/グルーブ/腰 等控制骨按它摆放)。
+    身高优先取蒙皮网格的高度:骨架里常有远离身体的骨(UE 的 Anim_Attachment 挂点在头顶
+    2.4m/地下 1m、XPS root hips 的长骨尾),按骨骼跨度会把身高撑大 20%~90%,
+    グルーブ 被摆到胸口、腰 被摆到身后。没有网格时退回骨骼跨度。"""
+    height = _mesh_height(edit_bones.id_data) or calculate_skeleton_height(edit_bones)
+    return height * 0.125
 
 
 def check_and_scale_skeleton(obj):

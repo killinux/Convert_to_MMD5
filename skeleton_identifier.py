@@ -1,7 +1,7 @@
-"""Auto skeleton identifier — pure topology+geometry bone role detection.
+"""Auto skeleton identifier — topology+geometry bone role detection, XPS names first.
 
 Analyzes any humanoid armature and produces a bone role mapping dict
-(same format as preset JSON files). No bone name dependency.
+(same format as preset JSON files).
 
 Algorithm:
 1. Find spine chain: trace from highest center bone to root via parents
@@ -10,9 +10,16 @@ Algorithm:
 4. Trace arm chains: shoulder/upper_arm/forearm/hand + fingers
 5. Trace leg chains: thigh/shin/foot/toe
 6. Find eye bones near head (symmetric pair)
+7. XPS standard names override: a bone carrying the XNALara standard name
+   of a role (presets/xna_lara.json) takes that role
 """
 
+import json
+import os
+
 from mathutils import Vector
+
+_XPS_PRESET = os.path.join(os.path.dirname(os.path.realpath(__file__)), "presets", "xna_lara.json")
 
 
 def identify_skeleton(armature_data):
@@ -28,6 +35,12 @@ def identify_skeleton(armature_data):
     if not bones:
         return _empty_result()
 
+    result = _identify_by_topology(bones)
+    _prefer_xps_standard_names(bones, result)
+    return result
+
+
+def _identify_by_topology(bones):
     result = _empty_result()
 
     spine = _find_spine_chain(bones)
@@ -48,6 +61,48 @@ def identify_skeleton(armature_data):
         _map_eyes(bones, result["head_bone"], result)
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# XPS standard names
+# ---------------------------------------------------------------------------
+
+def _prefer_xps_standard_names(bones, result):
+    """A bone carrying the XNALara standard name of a role takes that role.
+
+    Topology is fooled by extra bones on the spine chain, e.g. a UE facial root
+    above the head (read as 頭, leaving the skull and hair unrotated) or a Bip001
+    Pelvis under 'root hips' (read as センター, so its hip weight was treated as
+    control-bone weight). Standard names are explicit, so they win; roles with no
+    standard-named bone keep the topology result, and a topology pick that
+    duplicates a name-claimed bone is cleared.
+
+    A named bone only counts when it shares a parent chain with another named
+    bone: a lone leftover that happens to carry a standard name (an orphan
+    'root ground' beside the real root) says nothing about the rig."""
+    try:
+        with open(_XPS_PRESET, encoding="utf-8") as f:
+            table = json.load(f)
+    except (OSError, ValueError):
+        return
+    named = {role: name for role, name in table.items() if name and bones.get(name)}
+    claimed = set(named.values())
+    linked = set()
+    for name in claimed:
+        b = bones[name].parent
+        while b:
+            if b.name in claimed:
+                linked.update((name, b.name))
+                break
+            b = b.parent
+    named = {role: name for role, name in named.items() if name in linked}
+    if not named:
+        return
+    claimed = set(named.values())
+    for role, name in result.items():
+        if role not in named and name in claimed:
+            result[role] = ""
+    result.update(named)
 
 
 # ---------------------------------------------------------------------------

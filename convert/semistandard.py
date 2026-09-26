@@ -235,7 +235,8 @@ class OBJECT_OT_add_leg_d_bones(bpy.types.Operator):
             for ch in list(src.children):
                 if ch.name == d_name or ch.name == _next_chain[src_name]:
                     continue
-                if 'ＩＫ' in ch.name or 'IK' in ch.name or ch.name.startswith('_'):
+                # つま先 是 つま先ＩＫ 的 PMX 目标骨,须留在 FK 足首 下(见 ik.py)
+                if 'ＩＫ' in ch.name or 'IK' in ch.name or ch.name.startswith('_') or ch.name.endswith('つま先'):
                     continue
                 ch.use_connect = False
                 ch.parent = d

@@ -83,6 +83,12 @@ class OBJECT_OT_add_ik(bpy.types.Operator):
         for name, p in ik_bones.items():
             bone_utils.create_or_update_bone(eb, name, p["head"], p["tail"],
                                              use_connect=False, parent_name=p["parent"], use_deform=False)
+        # つま先:つま先ＩＫ 的 PMX 目标骨(标准骨架里是 足首 的子骨)。mmd_tools 导出时只在 IK 约束骨
+        # (足首)的子骨里找目标,而 足先EX 后面会被 D 骨步挪到 足首D 下——没有这根,つま先ＩＫ 导出后不是 IK。
+        for side in ("左", "右"):
+            head = eb[f"{side}足首"].tail.copy()
+            bone_utils.create_or_update_bone(eb, f"{side}つま先", head, head + Vector((0, -bone_length * 0.2, 0)),
+                                             use_connect=False, parent_name=f"{side}足首", use_deform=False)
 
         bpy.ops.object.mode_set(mode='POSE')
         pb = obj.pose.bones
@@ -96,4 +102,8 @@ class OBJECT_OT_add_ik(bpy.types.Operator):
         _add_damped_track(pb["左足首"], obj, "左ひざ")
         _add_ik(pb["右足首"], obj, "右つま先ＩＫ", 1, 200)
         _add_damped_track(pb["右足首"], obj, "右ひざ")
+        _add_damped_track(pb["左つま先"], obj, "左足首")
+        _add_damped_track(pb["右つま先"], obj, "右足首")
+        for side in ("左", "右"):
+            obj.data.bones[f"{side}つま先"].hide = True
         return {'FINISHED'}
