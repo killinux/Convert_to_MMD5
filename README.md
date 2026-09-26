@@ -2,7 +2,8 @@
 
 将外部骨骼格式（XPS / XNALara 等）**一键转换为 MMD（MikuMikuDance）格式**的 Blender 插件 —— 在原版 [Convert to MMD](https://gitee.com/UITCIS/Convert-to-MMD)（作者 **UITCIS / 空想幻灵**）基础上，对**骨骼管理引擎**做了一次从零重构。
 
-本仓库**只包含重构后的骨骼管理部分**（精简、可独立安装），不含原版的物理/导入/开发者工具。原版仍是功能更全的上游。
+本仓库以**重构后的骨骼管理**为主（精简、可独立安装），另有按参考 PMX 实测定参重写的物理工具
+（身体碰撞刚体 / 布 / 胸 / 头发）；不含原版的导入/开发者工具。原版仍是功能更全的上游。
 
 ---
 
@@ -43,6 +44,9 @@ Convert_to_MMD5/
    ├─ identify / correct / rename / complete / align / ik / groups / mmd_convert
    ├─ semistandard.py                       捩骨 + 腿D + 肩P（纯几何构建）
    ├─ grants.py                             唯一的付与(additional_transform)表
+   ├─ skirt.py                              身体碰撞刚体 + 布物理
+   ├─ breast.py                             胸部物理（复用或按网格造胸骨 + 刚体）
+   ├─ hair.py                               头发物理（复用已有发链 + 刚体）
    └─ weights/                              req1：复用 vs 切分 分离
       ├─ common.py                          共享 mesh/vgroup/轴 helper
       ├─ transfer.py                        复用路径：unused→就近 + 三角肌按位置路由
@@ -67,10 +71,16 @@ Convert_to_MMD5/
 
 ## 使用
 
-1. 用 XNALaraMesh 导入 XPS 模型，选中骨架。
-2. 面板「主骨骼管理」→ **一键转换 XPS→MMD**（自动识别骨架并跑完整流程）。
-   - 也可点 **自动识别骨架** 填充槽位后，手动逐步执行 1~5。
-3. 用 mmd_tools 导出 PMX。
+**[`docs/使用说明.md`](docs/使用说明.md)**:安装、面板上每个按钮的作用、导出设置、常见问题(先看这个)。
+每一步的细节、路线选择准则与完整排错见 **[`docs/操作手册.md`](docs/操作手册.md)**。简版:
+
+1. 用 XNALaraMesh 导入 XPS 模型(不要缩放),选中骨架。
+2. 面板「主骨骼管理」→ **一键转换 XPS→MMD**(自动识别骨架并跑完整流程;骨名是 XPS 标准名时
+   按名字识别,blender2xps 导出的 UE 骨架也适用)。
+   - 需要手动修正槽位时:**自动识别骨架** 或预设填槽 → 核对 → 手动分步 1~15(一键会重新识别覆盖槽位)。
+3. (可选)第二个 tab「衣服 / 刚体」:身体碰撞刚体、布物理、**胸部物理**(复用已有胸骨,没有则按网格造骨分权重)、
+   **头发物理**(复用已有发骨链;分叉的发根跟头走,名字不规范可手选)。
+4. 用 mmd_tools 导出 PMX:Scale **12.5**、勾 Copy textures。
 
 ## 验证
 
