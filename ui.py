@@ -9,7 +9,7 @@ import bpy
 # Bump this on every code update so you can SEE in the panel that Blender actually
 # reloaded the new code (Blender caches Python modules — a stale build means the
 # addon was not re-enabled/restarted). 改动后改这里。
-BUILD_STAMP = "build 2026-07-05 left-align"
+BUILD_STAMP = "build 2026-09-26 xps-names+breast+hair"
 
 
 def _step_btn(box, idname, text, icon=None, off=False):
@@ -20,7 +20,7 @@ def _step_btn(box, idname, text, icon=None, off=False):
     row.alignment = 'LEFT'
     row.enabled = not off
     kw = {"icon": icon} if icon else {}
-    row.operator(idname, text=text + ("(精简:跳过)" if off else ""), **kw)
+    return row.operator(idname, text=text + ("(精简:跳过)" if off else ""), **kw)
 
 
 def _bone_row(layout, scene, obj, label_text, prop_name):
@@ -208,8 +208,25 @@ class OBJECT_PT_skeleton_hierarchy(bpy.types.Panel):
             box = layout.box()
             box.label(text="刚体 / 物理", icon='PHYSICS')
             _step_btn(box, "object.add_body_rigids", "1. 身体碰撞刚体(自动)", icon='MESH_CAPSULE')
-            _step_btn(box, "object.add_skirt_physics", "2. 布物理: 裙/外套/披风/发(自动)", icon='PHYSICS')
+            _step_btn(box, "object.add_skirt_physics", "2. 布物理: 裙/外套/披风(自动)", icon='PHYSICS')
             box.label(text="先建身体刚体再建布物理，布料才不穿身", icon='INFO')
+
+            box = layout.box()
+            box.label(text="胸部物理", icon='MESH_UVSPHERE')
+            _step_btn(box, "object.add_breast_physics", "胸部物理(自动)", icon='PHYSICS')
+            _step_btn(box, "object.add_breast_bones", "1. 胸骨 + 权重")
+            _step_btn(box, "object.add_breast_rigids", "2. 胸部刚体 + 关节")
+            _step_btn(box, "object.remove_breast_physics", "清除胸部物理", icon='TRASH')
+            box.label(text="已有带权重的胸骨直接复用，没有则按网格造骨并分权重", icon='INFO')
+
+            box = layout.box()
+            box.label(text="头发物理", icon='STRANDS')
+            _step_btn(box, "object.add_hair_physics", "头发物理(自动识别发骨)",
+                      icon='PHYSICS').selected_only = False
+            _step_btn(box, "object.add_hair_physics", "头发物理(只用选中骨)").selected_only = True
+            _step_btn(box, "object.remove_hair_physics", "清除头发物理", icon='TRASH')
+            box.label(text="发根/分叉骨跟头走，单条发链进物理；先建身体刚体", icon='INFO')
+            box.label(text="骨名不规范：姿态模式选中发链首骨(后代自动带上)，点第二个", icon='INFO')
 
 
 def register():

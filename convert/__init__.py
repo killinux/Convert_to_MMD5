@@ -26,6 +26,13 @@ from .weights.transfer import OBJECT_OT_transfer_unused_weights
 from .weights.palm import OBJECT_OT_fix_palm_weights
 from .weights.clothing import OBJECT_OT_transfer_clothing_weights
 from .skirt import OBJECT_OT_add_skirt_physics, OBJECT_OT_add_body_rigids
+from .breast import (
+    OBJECT_OT_add_breast_bones,
+    OBJECT_OT_add_breast_rigids,
+    OBJECT_OT_add_breast_physics,
+    OBJECT_OT_remove_breast_physics,
+)
+from .hair import OBJECT_OT_add_hair_physics, OBJECT_OT_remove_hair_physics
 from .pipeline import OBJECT_OT_one_click_convert
 
 
@@ -51,6 +58,12 @@ _CLASSES = (
     OBJECT_OT_transfer_clothing_weights,
     OBJECT_OT_add_skirt_physics,
     OBJECT_OT_add_body_rigids,
+    OBJECT_OT_add_breast_bones,
+    OBJECT_OT_add_breast_rigids,
+    OBJECT_OT_add_breast_physics,
+    OBJECT_OT_remove_breast_physics,
+    OBJECT_OT_add_hair_physics,
+    OBJECT_OT_remove_hair_physics,
     OBJECT_OT_one_click_convert,
 )
 

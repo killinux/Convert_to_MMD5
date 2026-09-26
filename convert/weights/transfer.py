@@ -20,6 +20,7 @@ from ...helper_classifier import classify_helpers
 from ...skeleton_identifier import clear_cache
 from ...presets import get_bones_list
 from ..skirt import CLOTH_RE, HAIR_RE
+from ..breast import BREAST_RE
 
 
 def _slot_skeleton_map(scene, armature_data):
@@ -186,10 +187,11 @@ class OBJECT_OT_transfer_unused_weights(bpy.types.Operator):
                 if (cls.get(b.name) == 'merge'
                     or (b.name.startswith('unused') and cls.get(b.name) in ('twist', 'other')))
                 and b.name not in self.STANDARD_MMD_BONES
-                # 具名布/发骨(hangings/shawl/裙/发链等)保留权重给布物理——分类器会把
-                # 居中的脊柱系饰骨判成 merge,合并后布刚体就没意义了
+                # 具名布/发/胸骨(hangings/shawl/裙/发链/breast 等)保留权重给物理——分类器会把
+                # 居中的脊柱系饰骨判成 merge,合并后布/胸刚体就没意义了
                 and not (not b.name.startswith('unused')
-                         and (CLOTH_RE.search(b.name) or HAIR_RE.search(b.name)))
+                         and (CLOTH_RE.search(b.name) or HAIR_RE.search(b.name)
+                              or BREAST_RE.search(b.name)))
             ]
             control_bones = [b for b in obj.data.bones if b.name in self.CONTROL_BONES]
             print("\n[Transfer unused] 使用 auto-classifier")

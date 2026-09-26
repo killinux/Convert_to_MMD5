@@ -65,7 +65,8 @@ print('[ok] structure done')
 
 # 物理:身体碰撞 + 衣服/头发(词表不含胸,无胸部物理)
 act(); bpy.ops.object.add_body_rigids()
-act(); bpy.ops.object.add_skirt_physics(include_hair=True)
+act(); bpy.ops.object.add_skirt_physics()
+act(); bpy.ops.object.add_hair_physics()
 
 # 衣服/身体先彻底分组隔离(用户要求):所有布刚体归组10=身体免碰组,
 # 布与身体、布与布互不碰撞,纯关节悬挂;后续整体OK再逐步开碰撞。

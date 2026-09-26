@@ -1,6 +1,6 @@
 """布物理(刚体+关节) + 身体碰撞刚体 —— 复用已有布骨 + 复用 mmd_tools。
 
-转换后，给现成的布骨(裙/外套/披风/披肩/纱巾/飘带/发)补 MMD 标准的刚体+关节，
+转换后，给现成的布骨(裙/外套/披风/披肩/纱巾/飘带)补 MMD 标准的刚体+关节，
 使其在 VMD 动作下自然飘动。不造骨、不重刷权重；刚体/关节一律走 mmd_tools 的
 Model.createRigidBody/createJoint。
 
@@ -8,8 +8,8 @@ Model.createRigidBody/createJoint。
   * 词表识别布骨 → **按骨处理**(支持 cloak 5→6/7 这种分叉，不假设线性链)；
   * 父骨也是布骨 → 关节接父骨刚体；否则沿父链向上找第一个标准骨当锚
     (shawl 锚 肩、head scarf 锚 頭、scart 3-4 锚 足D、skirt 锚 下半身)，
-    锚骨没有刚体就补一个 kinematic 的；
-  * 头发单独一类:CAPSULE、更轻、限位更松，可开关。
+    锚骨没有刚体就补一个 kinematic 的；祖先已有刚体(如挂在发链上的飘带)就接它；
+  * 头发见 hair.py(参考实测参数，分叉的发根跟头走)。
 布料穿身需要身体有碰撞刚体，见 OBJECT_OT_add_body_rigids(半径按网格顶点实测)。
 
 尺寸按转换模型骨骼几何算，与尺度无关的参数(质量/阻尼/碰撞组/掩码/关节限位/弹簧)
@@ -25,7 +25,8 @@ from mathutils import Vector, Matrix
 CLOTH_RE = re.compile(
     r"skirt|スカート|coat|cloak|cape|mantle|shawl|veil|scar[ft]|hangings|drape|apron|robe|frill|sash|ribbon",
     re.I)
-HAIR_RE = re.compile(r"hair|ponytail|twintail|braid", re.I)
+HAIR_RE = re.compile(
+    r"hair|髪|ponytail|twintail|pigtail|braid|bangs|fringe|ahoge|アホ毛|もみあげ|おさげ", re.I)
 
 # 锚骨候选:布链根沿父链向上碰到的第一个即为锚
 ANCHOR_OK = ("下半身", "上半身3", "上半身2", "上半身", "首", "頭", "左肩", "右肩",
@@ -53,13 +54,6 @@ _ZERO3 = (0.0, 0.0, 0.0)
 # 目标 BOX 尺寸比例 厚:长:宽 = 0.25:2.0:1.5
 _THICK_RATIO = 0.125
 _WIDTH_RATIO = 0.75
-
-# —— 头发(照抄 Purifier Inase 18 参考 PMX 实测:CAPSULE、全轴±10°、零弹簧) ——
-_HAIR_MASS = 1.0
-_HAIR_R_RATIO = 0.18
-_HAIR_ANG_MAX = (math.radians(10), math.radians(10), math.radians(10))
-_HAIR_ANG_MIN = (math.radians(-10), math.radians(-10), math.radians(-10))
-_HAIR_SPRING_ANG = (0.0, 0.0, 0.0)
 
 
 def _mask16(no_collide):
@@ -166,19 +160,16 @@ def _make_kinematic(model, arm, bone_name):
 
 
 class OBJECT_OT_add_skirt_physics(bpy.types.Operator):
-    """给现成布骨(裙/外套/披风/披肩/飘带/发)自动加 MMD 刚体+关节(复用 mmd_tools)。
+    """给现成布骨(裙/外套/披风/披肩/飘带)自动加 MMD 刚体+关节(复用 mmd_tools)。
 
-    按骨处理(支持分叉链)；父骨是布骨→接父刚体，否则沿父链找标准骨当锚。
-    无布骨的模型自动跳过。建议先跑「身体碰撞刚体」，布料才不穿身。
+    按骨处理(支持分叉链)；父骨是布骨→接父刚体，否则沿父链找已有刚体或标准骨当锚。
+    无布骨的模型自动跳过。建议先跑「身体碰撞刚体」，布料才不穿身。头发见 hair.py。
     """
     bl_idname = "object.add_skirt_physics"
-    bl_label = "布物理: 裙/外套/披风/发(自动)"
-    bl_description = ("词表识别布骨(裙/coat/cloak/shawl/veil/scarf/飘带/发等)，"
+    bl_label = "布物理: 裙/外套/披风(自动)"
+    bl_description = ("词表识别布骨(裙/coat/cloak/shawl/veil/scarf/飘带等)，"
                      "逐骨建 mmd 刚体+关节，锚定到就近标准骨，VMD 下自然飘动")
     bl_options = {'REGISTER', 'UNDO'}
-
-    include_hair: bpy.props.BoolProperty(  # type: ignore
-        name="含头发", description="头发链也建物理(CAPSULE、更轻、限位更松)", default=True)
 
     def execute(self, context):
         from mmd_tools.core.model import Model
@@ -195,17 +186,11 @@ class OBJECT_OT_add_skirt_physics(bpy.types.Operator):
             return {'CANCELLED'}
 
         bones = arm.data.bones
-        targets = []
-        for b in bones:
-            n = b.name
-            if n.startswith(("unused", "_dummy_", "_shadow_")):
-                continue
-            if CLOTH_RE.search(n):
-                targets.append((b, False))
-            elif self.include_hair and HAIR_RE.search(n):
-                targets.append((b, True))
+        targets = [b for b in bones
+                   if not b.name.startswith(("unused", "_dummy_", "_shadow_"))
+                   and CLOTH_RE.search(b.name)]
         if not targets:
-            self.report({'INFO'}, "未发现布骨/发骨，跳过")
+            self.report({'INFO'}, "未发现布骨，跳过")
             return {'FINISHED'}
 
         if context.mode != 'OBJECT':
@@ -216,14 +201,14 @@ class OBJECT_OT_add_skirt_physics(bpy.types.Operator):
         if rbw and rbw.enabled:
             rbw.enabled = False
 
-        target_names = {b.name for b, _ in targets}
+        target_names = {b.name for b in targets}
         # 父在前(按层级深度排序)，保证接关节时父刚体已建好
         def _depth(b):
             d = 0; cur = b.parent
             while cur:
                 d += 1; cur = cur.parent
             return d
-        targets.sort(key=lambda t: _depth(t[0]))
+        targets.sort(key=_depth)
 
         mw = arm.matrix_world
         mask = _mask16(_NOCOLLIDE)
@@ -238,7 +223,8 @@ class OBJECT_OT_add_skirt_physics(bpy.types.Operator):
         def _anchor_name(b):
             cur = b.parent
             while cur:
-                if cur.name in ANCHOR_OK:
+                # 祖先已有刚体(发链/胸上的飘带)就跟着它动，否则找标准骨
+                if cur.name in ANCHOR_OK or cur.name in existing:
                     return cur.name
                 cur = cur.parent
             return ANCHOR_FALLBACK
@@ -270,7 +256,7 @@ class OBJECT_OT_add_skirt_physics(bpy.types.Operator):
             return False
 
         n_rb = n_jt = n_anchor = 0
-        for b, is_hair in targets:
+        for b in targets:
             # 段向量:指向第一个同为目标的子骨；叶骨用自身 tail。
             # 子骨异常远(如 cloak 5→6/7 分叉的枝端相距 1.6m)会造出巨型刚体引爆整链，
             # 此时退回自身 tail。
@@ -289,43 +275,27 @@ class OBJECT_OT_add_skirt_physics(bpy.types.Operator):
             group = (_GROUP_NEAR if (_cloth_depth(b) <= 1
                      or _near_body(head + vec * 0.5, _hd)) else _GROUP)
 
-            # 段坐标系:发胶囊 Z 沿骨(胶囊长轴约定),布箱 Y 沿骨
-            if is_hair:
-                length = vec.length
-                euler = _capsule_frame(vec)
-            else:
-                center, euler, half_len = _box_frame(head, vec, center_xy)
+            # 段坐标系:布箱 Y 沿骨
+            center, euler, half_len = _box_frame(head, vec, center_xy)
 
             rigid = existing.get(b.name)
             if rigid is None:
-                if is_hair:
-                    rigid = model.createRigidBody(
-                        shape_type=2,                    # CAPSULE
-                        location=head + vec * 0.5, rotation=euler,
-                        size=(min(0.05, max(0.015, length * _HAIR_R_RATIO)), max(0.03, length), 0.0),
-                        dynamics_type=_DYN_DYNAMIC,
-                        collision_group_number=group, collision_group_mask=mask,
-                        name=b.name, bone=b.name,
-                        mass=_HAIR_MASS, friction=_FRICTION,
-                        linear_damping=_LIN_DAMP, angular_damping=_ANG_DAMP, bounce=_BOUNCE,
-                    )
-                else:
-                    half_len = min(half_len, 0.25)      # 防异常巨箱
-                    size = (max(0.012, half_len * _THICK_RATIO), max(0.015, half_len),
-                            max(0.015, half_len * _WIDTH_RATIO))
-                    rigid = model.createRigidBody(
-                        shape_type=1,                    # BOX
-                        location=center, rotation=euler, size=size,
-                        dynamics_type=_DYN_DYNAMIC,
-                        collision_group_number=group, collision_group_mask=mask,
-                        name=b.name, bone=b.name,
-                        mass=_MASS, friction=_FRICTION,
-                        linear_damping=_LIN_DAMP, angular_damping=_ANG_DAMP, bounce=_BOUNCE,
-                    )
+                half_len = min(half_len, 0.25)      # 防异常巨箱
+                size = (max(0.012, half_len * _THICK_RATIO), max(0.015, half_len),
+                        max(0.015, half_len * _WIDTH_RATIO))
+                rigid = model.createRigidBody(
+                    shape_type=1,                    # BOX
+                    location=center, rotation=euler, size=size,
+                    dynamics_type=_DYN_DYNAMIC,
+                    collision_group_number=group, collision_group_mask=mask,
+                    name=b.name, bone=b.name,
+                    mass=_MASS, friction=_FRICTION,
+                    linear_damping=_LIN_DAMP, angular_damping=_ANG_DAMP, bounce=_BOUNCE,
+                )
                 existing[b.name] = rigid
                 n_rb += 1
 
-            # 关节:父是布/发骨→接父刚体；否则接锚(没有锚刚体就补 kinematic)
+            # 关节:父是布骨→接父刚体；否则接锚(没有锚刚体就补 kinematic)
             if b.parent and b.parent.name in target_names:
                 parent_rigid = existing.get(b.parent.name)
             else:
@@ -337,19 +307,15 @@ class OBJECT_OT_add_skirt_physics(bpy.types.Operator):
                         existing[aname] = parent_rigid
                         n_anchor += 1
             if parent_rigid is not None:
-                amax, amin, sang = ((_HAIR_ANG_MAX, _HAIR_ANG_MIN, _HAIR_SPRING_ANG)
-                                    if is_hair else (_ANG_MAX, _ANG_MIN, _SPRING_ANG))
                 # 弹簧刚度按段长²缩放(基准 0.15m):质量固定时转动惯量∝L²，
                 # 短段配满刚度弹簧会超出求解器稳定域(实测 6cm shawl 段 f10 即爆)。
                 sk = min(1.0, max(0.02, (vec.length / 0.15) ** 2))
-                sang = tuple(s * sk for s in sang)
-                jrot = ((0.0, 0.0, 0.0) if is_hair
-                        else _joint_frame(vec, head + vec * 0.5, center_xy))
+                sang = tuple(s * sk for s in _SPRING_ANG)
                 model.createJoint(
-                    location=head, rotation=jrot,
+                    location=head, rotation=_joint_frame(vec, head + vec * 0.5, center_xy),
                     rigid_a=parent_rigid, rigid_b=rigid,
                     maximum_location=_ZERO3, minimum_location=_ZERO3,
-                    maximum_rotation=amax, minimum_rotation=amin,
+                    maximum_rotation=_ANG_MAX, minimum_rotation=_ANG_MIN,
                     spring_linear=_SPRING_LIN, spring_angular=sang,
                     name=b.name,
                 )
@@ -408,7 +374,7 @@ def _skinned_meshes(arm):
 _REGION_STOP = frozenset(
     [d[0] for d in _BODY_DEFS]
     + [v for d in _BODY_DEFS for v in d[3]]
-    + ["左肩", "右肩", "左手首", "右手首"])
+    + ["左肩", "右肩", "左手首", "右手首", "左足首", "右足首", "左足首D", "右足首D"])
 
 
 def _region_names(arm, seeds):
@@ -474,6 +440,38 @@ def _measured_radius(arm, meshes, bone_name, vg_names=(), pct=0.85, mode="circ")
     return min(max(r, 0.015), L * 1.5)
 
 
+def _make_body_rigid(model, arm, meshes, body_def):
+    """按 _BODY_DEFS 的一项建一个 kinematic 身体刚体(半径实测,测不到按骨长兜底)。"""
+    bone_name, shape, fb_ratio, vg_names, rmode, horiz = body_def
+    bone = arm.data.bones.get(bone_name)
+    if not bone:
+        return None
+    h, vec, length, euler = _bone_frame(arm, bone)
+    r, src = _measured_radius(arm, meshes, bone_name, vg_names, mode=rmode), "vg"
+    if r is None:
+        r, src = length * fb_ratio, "fb"
+    loc = h + vec * 0.5
+    if shape == 0:      # SPHERE
+        size = (r, 0.0, 0.0)
+    elif horiz:         # 躯干横放:长轴世界 X,半宽实测,圆截面管前后/上下
+        euler = _capsule_frame(Vector((1.0, 0.0, 0.0)))
+        wsemi = _lateral_semi(arm, meshes, bone_name, vg_names)
+        size = (r, max(0.01, 2.0 * (wsemi - r)) if wsemi else length, 0.0)
+    else:               # 沿骨:height 扣掉两端半球，避免总长超出
+        size = (r, max(length * 0.35, length - r), 0.0)
+    rigid = model.createRigidBody(
+        shape_type=shape, location=loc, rotation=euler, size=size,
+        dynamics_type=_DYN_STATIC,
+        collision_group_number=0, collision_group_mask=_mask16(_BODY_NOCOLLIDE),
+        name=bone_name, bone=bone_name,
+        mass=_MASS, friction=0.5, linear_damping=0.5, angular_damping=0.5, bounce=0.0,
+    )
+    print(f"[body-rigid] {bone_name}: shape={'SPHERE' if shape==0 else 'CAPSULE'} "
+          f"r={r:.3f}({src},{rmode}{',横' if horiz else ''}) len={length:.3f} "
+          f"h={size[1]:.3f}")
+    return rigid
+
+
 def _lateral_semi(arm, meshes, bone_name, vg_names=(), pct=0.95):
     """横放胶囊的半宽:区域顶点(权重>0.3)|x−骨中点x| 的分位数(乳/臀凸起
     只加深前后向,不影响 |dx|,宽度量得干净)。侧面就是垂布的接触面,
@@ -537,35 +535,14 @@ class OBJECT_OT_add_body_rigids(bpy.types.Operator):
         meshes = _skinned_meshes(arm)
         existing = _existing_rigids()
         n = 0
-        for bone_name, shape, fb_ratio, vg_names, rmode, horiz in _BODY_DEFS:
-            bone = arm.data.bones.get(bone_name)
-            if not bone or bone_name in existing:
+        for body_def in _BODY_DEFS:
+            if body_def[0] in existing:
                 continue
-            h, vec, length, euler = _bone_frame(arm, bone)
-            r, src = _measured_radius(arm, meshes, bone_name, vg_names, mode=rmode), "vg"
-            if r is None:
-                r, src = length * fb_ratio, "fb"
-            loc = h + vec * 0.5
-            if shape == 0:      # SPHERE
-                size = (r, 0.0, 0.0)
-            elif horiz:         # 躯干横放:长轴世界 X,半宽实测,圆截面管前后/上下
-                euler = _capsule_frame(Vector((1.0, 0.0, 0.0)))
-                wsemi = _lateral_semi(arm, meshes, bone_name, vg_names)
-                size = (r, max(0.01, 2.0 * (wsemi - r)) if wsemi else length, 0.0)
-            else:               # 沿骨:height 扣掉两端半球，避免总长超出
-                size = (r, max(length * 0.35, length - r), 0.0)
-            rigid = model.createRigidBody(
-                shape_type=shape, location=loc, rotation=euler, size=size,
-                dynamics_type=_DYN_STATIC,
-                collision_group_number=0, collision_group_mask=_mask16(_BODY_NOCOLLIDE),
-                name=bone_name, bone=bone_name,
-                mass=_MASS, friction=0.5, linear_damping=0.5, angular_damping=0.5, bounce=0.0,
-            )
-            existing[bone_name] = rigid
+            rigid = _make_body_rigid(model, arm, meshes, body_def)
+            if rigid is None:
+                continue
+            existing[body_def[0]] = rigid
             n += 1
-            print(f"[body-rigid] {bone_name}: shape={'SPHERE' if shape==0 else 'CAPSULE'} "
-                  f"r={r:.3f}({src},{rmode}{',横' if horiz else ''}) len={length:.3f} "
-                  f"h={size[1]:.3f}")
 
         # 同布物理:不 build()，避免导出前物理求值污染绑定位。
 
