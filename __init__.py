@@ -35,6 +35,7 @@ def register():
         items=[
             ('option1', "主骨骼管理", "预设管理和主骨骼转换操作"),
             ('option2', "衣服 / 刚体", "衣服与刚体等的处理"),
+            ('option3', "表情", "用脸骨做 MMD 标准表情"),
         ],
         default='option1')
     bpy.types.Scene.convert_route = bpy.props.EnumProperty(

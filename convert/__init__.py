@@ -33,6 +33,7 @@ from .breast import (
     OBJECT_OT_remove_breast_physics,
 )
 from .hair import OBJECT_OT_add_hair_physics, OBJECT_OT_remove_hair_physics
+from .face import OBJECT_OT_add_face_morphs, OBJECT_OT_remove_face_morphs
 from .pipeline import OBJECT_OT_one_click_convert
 
 
@@ -64,6 +65,8 @@ _CLASSES = (
     OBJECT_OT_remove_breast_physics,
     OBJECT_OT_add_hair_physics,
     OBJECT_OT_remove_hair_physics,
+    OBJECT_OT_add_face_morphs,
+    OBJECT_OT_remove_face_morphs,
     OBJECT_OT_one_click_convert,
 )
 

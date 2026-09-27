@@ -3,7 +3,8 @@
 将外部骨骼格式（XPS / XNALara 等）**一键转换为 MMD（MikuMikuDance）格式**的 Blender 插件 —— 在原版 [Convert to MMD](https://gitee.com/UITCIS/Convert-to-MMD)（作者 **UITCIS / 空想幻灵**）基础上，对**骨骼管理引擎**做了一次从零重构。
 
 本仓库以**重构后的骨骼管理**为主（精简、可独立安装），另有按参考 PMX 实测定参重写的物理工具
-（身体碰撞刚体 / 布 / 胸 / 头发）；不含原版的导入/开发者工具。原版仍是功能更全的上游。
+（身体碰撞刚体 / 布 / 胸 / 头发），以及给 MetaHuman 式脸骨模型做 MMD 标准表情（骨骼 morph）的工具；
+不含原版的导入/开发者工具。原版仍是功能更全的上游。
 
 ---
 
@@ -47,6 +48,7 @@ Convert_to_MMD5/
    ├─ skirt.py                              身体碰撞刚体 + 布物理
    ├─ breast.py                             胸部物理（复用或按网格造胸骨 + 刚体）
    ├─ hair.py                               头发物理（复用已有发链 + 刚体）
+   ├─ face.py                               脸骨表情（MetaHuman 式 FACIAL_* → 59 个骨骼 morph）
    └─ weights/                              req1：复用 vs 切分 分离
       ├─ common.py                          共享 mesh/vgroup/轴 helper
       ├─ transfer.py                        复用路径：unused→就近 + 三角肌按位置路由
@@ -80,7 +82,9 @@ Convert_to_MMD5/
    - 需要手动修正槽位时:**自动识别骨架** 或预设填槽 → 核对 → 手动分步 1~15(一键会重新识别覆盖槽位)。
 3. (可选)第二个 tab「衣服 / 刚体」:身体碰撞刚体、布物理、**胸部物理**(复用已有胸骨,没有则按网格造骨分权重)、
    **头发物理**(复用已有发骨链;分叉的发根跟头走,名字不规范可手选)。
-4. 用 mmd_tools 导出 PMX:Scale **12.5**、勾 Copy textures。
+4. (可选)第三个 tab「表情」:脸是 UE MetaHuman 式脸骨(`FACIAL_*`)的,一键做 まばたき/笑い/眉/あいうえお/
+   ぺろっ 等 MMD 标准表情(骨骼 morph)。
+5. 用 mmd_tools 导出 PMX:Scale **12.5**、勾 Copy textures。
 
 ## 验证
 
