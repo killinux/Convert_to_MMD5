@@ -1,4 +1,7 @@
-"""表情(脸骨):给脸靠骨骼驱动、没有形态键的模型做 MMD 标准表情(PMX 骨骼 morph)。
+"""表情(脸骨):给脸靠骨骼驱动、没有形态键的模型算 MMD 标准表情的骨骼姿势。
+
+这里只管「算」:表情引擎(expression/)把它当作「脸骨」来源(sources.FaceBoneSource),
+再按选项写成 PMX 骨骼 morph 或烘焙成顶点 morph;按钮在 expression/ui.py(第 3 页「表情」)。
 
 适用 UE MetaHuman 式脸骨:`FACIAL_C_FacialRoot` 下几百根 FACIAL_[LCR]_*(blender2xps 从 UE 导出的
 XPS 常见;下巴骨 FACIAL_C_Jaw 可能已被改名成 XPS 标准名 `head jaw`)。这种脸骨很密,一个表情要
@@ -19,12 +22,10 @@ XPS 常见;下巴骨 FACIAL_C_Jaw 可能已被改名成 XPS 标准名 `head jaw`
 import math
 import re
 
-import bpy
 from mathutils import Matrix, Vector
 
-from .skirt import _find_root, _skinned_meshes
+from .skirt import _skinned_meshes
 
-_TAG = "c2m_face"                   # 根对象上记录本功能建过的 morph 名(清除只删这些)
 _ROOT = "FACIAL_C_FacialRoot"
 _NECK_UP = "FACIAL_C_Neck2Root"     # MetaHuman 上颈皮肤骨的根(挂在 首 下)
 _NECK_LOW = "FACIAL_C_Neck1Root"
@@ -468,8 +469,10 @@ class Face:
         pose = rest⁻¹ · D_parent⁻¹ · D · rest;父骨动了而自己不该动的骨也会得到抵消项。"""
         D = self.deltas(comps)
         ident = Matrix.Identity(4)
+        bones = self.arm.data.bones       # 按名取:进出编辑模式(断开连接骨)后旧 Bone 引用会失效
         out = {}
-        for b in self.bones:
+        for name in self.names:
+            b = bones[name]
             d = D.get(b.name)
             dp = D.get(b.parent.name) if b.parent else None
             if d is None and dp is None:
@@ -602,186 +605,3 @@ def compute(arm, meshes=None):
     face = Face(arm)
     face.calibrate(meshes if meshes is not None else _skinned_meshes(arm))
     return face, {name: face.offsets(comps) for name, _e, _c, comps in MORPHS}
-
-
-def disconnect_movers(arm, morphs):
-    """要平移的骨若是「连接」骨(如舌根),Blender 会忽略它的位移:断开连接。
-    连接只影响 Blender 里摆姿势,PMX/MMD 没有这个概念,导出结果不变。"""
-    need = sorted({n for offs in morphs.values() for n, (loc, _r) in offs.items()
-                   if loc.length > _EPS_LOC and arm.data.bones[n].use_connect})
-    if not need:
-        return need
-    view_layer = bpy.context.view_layer
-    active, mode = view_layer.objects.active, arm.mode
-    view_layer.objects.active = arm
-    bpy.ops.object.mode_set(mode='EDIT')
-    for n in need:
-        arm.data.edit_bones[n].use_connect = False
-    bpy.ops.object.mode_set(mode='OBJECT' if mode == 'EDIT' else mode)
-    view_layer.objects.active = active
-    return need
-
-
-# -- mmd_tools ---------------------------------------------------------------------------
-class _SliderState:
-    """改 morph 列表期间先解绑 mmd_tools 的 morph slider,改完再按原状态重建/重绑
-    (slider 的驱动器指着旧偏移,不解绑的话 Blender 预览和导出的 PMX 不一致)。"""
-
-    def __init__(self, root):
-        from mmd_tools.core.model import Model
-        self.slider = Model(root).morph_slider
-        self.existed = self.slider.placeholder() is not None
-        self.bound = self.existed and self.slider.placeholder(binded=True) is not None
-
-    def __enter__(self):
-        if self.bound:
-            self.slider.unbind()
-        return self
-
-    def __exit__(self, *exc):
-        if self.existed:
-            try:
-                self.slider.create()
-                if self.bound:
-                    self.slider.bind()
-            except Exception as e:      # slider 只是预览辅助,不能因为它丢 morph
-                print("[face] morph slider 未恢复:", e)
-        return False
-
-
-def _refresh_facial_frame(root):
-    """把全部 morph 列进「表情」显示枠(MMD 的表情面板读的是这个枠)。"""
-    from mmd_tools.core.model import Model
-    from mmd_tools.operators.display_item import DisplayItemQuickSetup
-    if "表情" not in root.mmd_root.display_item_frames:
-        Model(root).initialDisplayFrames(reset=False)
-    DisplayItemQuickSetup.load_facial_items(root.mmd_root)
-
-
-def _reset_pose(arm, names):
-    for n in names:
-        pb = arm.pose.bones.get(n)
-        if pb is not None:
-            pb.matrix_basis.identity()
-
-
-def _remove(root, names):
-    mmd_root = root.mmd_root
-    removed = []
-    for n in names:
-        i = mmd_root.bone_morphs.find(n)
-        if i >= 0:
-            mmd_root.bone_morphs.remove(i)
-            removed.append(n)
-    if removed:
-        mmd_root.active_morph_type = "bone_morphs"
-        mmd_root.active_morph = max(0, min(mmd_root.active_morph, len(mmd_root.bone_morphs) - 1))
-    return removed
-
-
-class OBJECT_OT_add_face_morphs(bpy.types.Operator):
-    """用脸骨做 MMD 标准表情(骨骼 morph):眨眼/笑眼/眉/あいうえお/舌头等,适用 MetaHuman 式脸骨"""
-    bl_idname = "object.add_face_morphs"
-    bl_label = "表情(脸骨)"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        root = _find_root(context.active_object)
-        if not root:
-            self.report({'ERROR'}, "未找到 mmd 模型(请先完成转换)")
-            return {'CANCELLED'}
-        from mmd_tools.core.model import Model
-        arm = Model(root).armature()
-        if not arm:
-            self.report({'ERROR'}, "mmd 模型没有骨架")
-            return {'CANCELLED'}
-        if context.mode != 'OBJECT':
-            bpy.ops.object.mode_set(mode='OBJECT')
-        try:
-            face, morphs = compute(arm)
-        except LookupError as e:
-            self.report({'WARNING'}, f"没有可用的脸骨,未建表情:{e}")
-            return {'CANCELLED'}
-
-        mmd_root = root.mmd_root
-        mine = set(root.get(_TAG, []))
-        created, foreign = [], []
-        used = set()
-        try:
-            loose = disconnect_movers(arm, morphs)
-        except RuntimeError as e:          # 骨架被隐藏等进不了编辑模式:Blender 里预览不到这几根的位移
-            loose = []
-            print("[face] 未能断开连接骨:", e)
-        _reset_pose(arm, face.names)
-        with _SliderState(root):
-            _remove(root, sorted(mine))         # 本工具上次建的全部重建
-            for name, name_e, cat, _comps in MORPHS:
-                if mmd_root.bone_morphs.find(name) >= 0 or mmd_root.vertex_morphs.find(name) >= 0:
-                    foreign.append(name)        # 模型自带/别人做的同名表情:不覆盖
-                    continue
-                offs = morphs[name]
-                if not offs:
-                    continue
-                morph = mmd_root.bone_morphs.add()
-                morph.name, morph.name_e, morph.category = name, name_e, cat
-                for bone, (loc, rot) in offs.items():
-                    item = morph.data.add()
-                    item.bone, item.location, item.rotation = bone, loc, rot
-                    used.add(bone)
-                    if loc.length > _EPS_LOC:
-                        arm.pose.bones[bone].lock_location = (False, False, False)
-                created.append(name)
-            root[_TAG] = sorted(created)
-            if created:
-                try:
-                    _refresh_facial_frame(root)
-                except Exception as e:      # 显示枠只影响 MMD 面板排列,morph 本身已建好
-                    print("[face] 表情枠:", e)
-                mmd_root.active_morph_type = "bone_morphs"
-                mmd_root.active_morph = mmd_root.bone_morphs.find(created[0])
-
-        cats = {}
-        for name, _e, cat, _c in MORPHS:
-            if name in created:
-                cats[cat] = cats.get(cat, 0) + 1
-        gaps = {s: math.degrees(face.lid_gap(s, face.x_out(s, face.pivot[s]))) for s in "LR"}
-        msg = (f"表情: 建 {len(created)} 个(眉 {cats.get('EYEBROW', 0)} / 目 {cats.get('EYE', 0)} / "
-               f"口 {cats.get('MOUTH', 0)}), 用到脸骨 {len(used)} 根;"
-               f"眼裂 L {gaps['L']:.0f}° R {gaps['R']:.0f}°")
-        if foreign:
-            msg += f";已有同名表情未覆盖 {len(foreign)} 个"
-        if loose:
-            msg += f";为平移断开连接的骨 {' '.join(loose)}"
-        self.report({'INFO'}, msg)
-        print("[face] " + msg)
-        return {'FINISHED'}
-
-
-class OBJECT_OT_remove_face_morphs(bpy.types.Operator):
-    """删除本工具建的表情(模型自带/别人做的同名表情不动)"""
-    bl_idname = "object.remove_face_morphs"
-    bl_label = "清除表情"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        root = _find_root(context.active_object)
-        if not root:
-            self.report({'ERROR'}, "未找到 mmd 模型")
-            return {'CANCELLED'}
-        from mmd_tools.core.model import Model
-        arm = Model(root).armature()
-        names = list(root.get(_TAG, []))
-        with _SliderState(root):
-            removed = _remove(root, names)
-            root[_TAG] = sorted(set(names) - set(removed))
-            if removed:
-                try:
-                    _refresh_facial_frame(root)
-                except Exception:
-                    pass
-        if arm:
-            root_bone = arm.data.bones.get(_ROOT)
-            if root_bone:
-                _reset_pose(arm, [root_bone.name] + [b.name for b in root_bone.children_recursive])
-        self.report({'INFO'}, f"已清除表情 {len(removed)} 个")
-        return {'FINISHED'}

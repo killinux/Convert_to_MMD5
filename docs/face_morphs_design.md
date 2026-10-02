@@ -3,6 +3,10 @@
 给**脸靠骨骼驱动、没有形态键**的模型做 MMD 标准表情(PMX 骨骼 morph)。当前支持 UE MetaHuman 式脸骨,
 以 Fiona(Vindictus,blender2xps 导出的 XPS)为样本开发与验证。
 
+> 2026-10-01 起,这里是表情引擎(`expression/`)的「脸骨」来源(`sources.FaceBoneSource`):本文的算法不变,
+> 写 morph、按钮、标记改由引擎负责,也能烘焙成顶点 morph,见 [expression_design.md](expression_design.md)。
+> 下文「按钮」指现在第 3 页的「生成表情」(来源 = 脸骨或自动,方式 = 骨骼或自动)。
+
 ## 1. 样本脸骨实测(Fiona)
 
 - 网格里**没有任何形态键**(XPS 格式本身不带),脸完全靠骨骼:`FACIAL_C_FacialRoot` 下 617 根 `FACIAL_*`,

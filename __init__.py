@@ -17,6 +17,7 @@ from . import properties
 from . import presets
 from . import ui
 from . import convert
+from . import expression
 
 
 def register():
@@ -25,6 +26,7 @@ def register():
     properties.register_properties(presets.get_bones_list())
     presets.register()
     convert.register()
+    expression.register()
     ui.register()
 
     bpy.types.Scene.preset_enum = bpy.props.EnumProperty(
@@ -35,7 +37,7 @@ def register():
         items=[
             ('option1', "主骨骼管理", "预设管理和主骨骼转换操作"),
             ('option2', "衣服 / 刚体", "衣服与刚体等的处理"),
-            ('option3', "表情", "用脸骨做 MMD 标准表情"),
+            ('option3', "表情", "MMD 表情 / Faceit(ARKit 52),来源可选脸骨、DNA、已有形态键等"),
         ],
         default='option1')
     bpy.types.Scene.convert_route = bpy.props.EnumProperty(
@@ -54,6 +56,7 @@ def unregister():
     encoding_patch.remove_encoding_patch()
 
     ui.unregister()
+    expression.unregister()
     convert.unregister()
     presets.unregister()
     properties.unregister_properties(properties.get_registered_props())

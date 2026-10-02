@@ -3,8 +3,10 @@
 将外部骨骼格式（XPS / XNALara 等）**一键转换为 MMD（MikuMikuDance）格式**的 Blender 插件 —— 在原版 [Convert to MMD](https://gitee.com/UITCIS/Convert-to-MMD)（作者 **UITCIS / 空想幻灵**）基础上，对**骨骼管理引擎**做了一次从零重构。
 
 本仓库以**重构后的骨骼管理**为主（精简、可独立安装），另有按参考 PMX 实测定参重写的物理工具
-（身体碰撞刚体 / 布 / 胸 / 头发），以及给 MetaHuman 式脸骨模型做 MMD 标准表情（骨骼 morph）的工具；
-不含原版的导入/开发者工具。原版仍是功能更全的上游。
+（身体碰撞刚体 / 布 / 胸 / 头发），以及表情工具：**MMD 标准表情**（骨骼 / 顶点 morph）和 **Faceit 用的
+52 个 ARKit 形态键**两种输出都可选，来源可以是 MetaHuman 脸骨、FF7 Remake / Rebirth 脸骨、MetaHuman DNA、
+模型自带的 ARKit 形态键、姿势库或骨骼脸，每个表情都能载入到骨架上手调；不含原版的导入/开发者工具。
+原版仍是功能更全的上游。
 
 ---
 
@@ -40,6 +42,11 @@ Convert_to_MMD5/
 │  skeleton_identifier.py · helper_classifier.py
 │  properties.py · encoding_patch.py        与骨名无关的基础模块（原样复用）
 ├─ presets/                                 28 个骨架预设 + 2 个 canonical 方向
+├─ expression/                              表情（第 3 页）：来源 → MMD 表情 / ARKit 52（Faceit）
+│  ├─ ui.py · api.py · engine.py            面板与按钮 / 脚本入口 / 来源+配方→骨骼 morph 或形态键
+│  ├─ sources.py · recipes.py · roles.py    来源（含「自动」）/ MMD 60 + ARKit 52 配方 / 骨骼脸角色
+│  ├─ ff7.py · manual.py                    FF7 脸骨（表情数据 → 骨骼姿势、FF7 配方）/ 手调（优先、镜像）
+│  └─ dna.py · bake.py · mmd.py · faceit.py · ue_weights.py · names.py
 └─ convert/                                 转换引擎
    ├─ pipeline.py                           一键流程编排
    ├─ identify / correct / rename / complete / align / ik / groups / mmd_convert
@@ -48,7 +55,7 @@ Convert_to_MMD5/
    ├─ skirt.py                              身体碰撞刚体 + 布物理
    ├─ breast.py                             胸部物理（复用或按网格造胸骨 + 刚体）
    ├─ hair.py                               头发物理（复用已有发链 + 刚体）
-   ├─ face.py                               脸骨表情（MetaHuman 式 FACIAL_* → 59 个骨骼 morph）
+   ├─ face.py                               「脸骨」来源：MetaHuman 式 FACIAL_* → 59 个 MMD 表情的骨骼姿势
    └─ weights/                              req1：复用 vs 切分 分离
       ├─ common.py                          共享 mesh/vgroup/轴 helper
       ├─ transfer.py                        复用路径：unused→就近 + 三角肌按位置路由
@@ -62,6 +69,7 @@ Convert_to_MMD5/
 - Blender **3.0+**（在 3.6.15 上验证）
 - [**mmd_tools**](https://extensions.blender.org/add-ons/mmd-tools/)（必需：格式转换 + 付与中转链）
 - 导入 XPS 源模型需 **XNALaraMesh**（本插件不含导入，依赖独立安装）
+- 可选：**Faceit**（2.3，付费插件）——只有要把 ARKit 形态键注册给 iPhone 面捕时才需要；不装也能生成形态键
 
 ## 安装
 
@@ -82,9 +90,11 @@ Convert_to_MMD5/
    - 需要手动修正槽位时:**自动识别骨架** 或预设填槽 → 核对 → 手动分步 1~15(一键会重新识别覆盖槽位)。
 3. (可选)第二个 tab「衣服 / 刚体」:身体碰撞刚体、布物理、**胸部物理**(复用已有胸骨,没有则按网格造骨分权重)、
    **头发物理**(复用已有发骨链;分叉的发根跟头走,名字不规范可手选)。
-4. (可选)第三个 tab「表情」:脸是 UE MetaHuman 式脸骨(`FACIAL_*`)的,一键做 まばたき/笑い/眉/あいうえお/
-   ぺろっ 等 MMD 标准表情(骨骼 morph)。
-5. 用 mmd_tools 导出 PMX:Scale **12.5**、勾 Copy textures。
+4. (可选)第三个 tab「表情」:勾要的输出——**MMD 表情**(まばたき/笑い/眉/あいうえお/ぺろっ 等,骨骼或顶点
+   morph)、**Faceit(ARKit 52)**(52 个 ARKit 形态键并注册到 Faceit)——点「生成表情」。来源默认「自动」:
+   给了 MetaHuman DNA 用 DNA,否则依次是模型自带的 ARKit 形态键、MetaHuman 脸骨、骨骼脸。
+5. 用 mmd_tools 导出 PMX:Scale **12.5**、勾 Copy textures(做了 ARKit 形态键的话用第 3 页工具里的
+   「导出 PMX」,默认不把它们写进 PMX)。
 
 ## 验证
 
@@ -94,3 +104,5 @@ Convert_to_MMD5/
 
 - 原版 **Convert to MMD** 作者：**UITCIS（空想幻灵）** — [Gitee](https://gitee.com/UITCIS/Convert-to-MMD) · [B站](https://space.bilibili.com/43768997)
 - 本仓库为其骨骼管理部分的重构衍生版，遵循同一许可证 **GPL-3.0**（见 [`LICENSE`](LICENSE)）。
+- `expression/` 移植自 ripper_tpose 项目的 expression_kit 插件（DNA 读取与 RigLogic 求值、配方、
+  UE5 完整权重恢复、Faceit 注册），设计与验证见 [`docs/expression_design.md`](docs/expression_design.md)。

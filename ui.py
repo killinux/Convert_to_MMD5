@@ -6,10 +6,12 @@ unchanged (req 5). The 次标准 tab lists only the bone operators kept in this 
 
 import bpy
 
+from .expression import ui as expression_ui
+
 # Bump this on every code update so you can SEE in the panel that Blender actually
 # reloaded the new code (Blender caches Python modules — a stale build means the
 # addon was not re-enabled/restarted). 改动后改这里。
-BUILD_STAMP = "build 2026-09-27 xps-names+breast+hair+face"
+BUILD_STAMP = "build 2026-10-02 expressions+ff7+manual+faceit-facing"
 
 
 def _step_btn(box, idname, text, icon=None, off=False):
@@ -196,13 +198,8 @@ class OBJECT_PT_skeleton_hierarchy(bpy.types.Panel):
             _step_btn(opt, "object.straighten_arms", "拉直手臂(肘+腕)", icon='BONE_DATA')
 
         elif scene.my_enum == 'option3':
-            box = layout.box()
-            box.label(text="表情(脸骨)", icon='SHAPEKEY_DATA')
-            _step_btn(box, "object.add_face_morphs", "表情: 用脸骨做 MMD 标准表情(自动)", icon='MONKEY')
-            _step_btn(box, "object.remove_face_morphs", "清除表情", icon='TRASH')
-            box.label(text="适用 UE MetaHuman 式脸骨(FACIAL_*),转换完成后点", icon='INFO')
-            box.label(text="眨眼/笑眼/眉/あいうえお/舌头等标准表情,进「表情」显示枠", icon='INFO')
-            box.label(text="预览用 mmd_tools 的 Morph Tools;导出前清掉预览姿势", icon='INFO')
+            # 表情:来源 + 两个可选输出(MMD 表情 / Faceit),见 expression/ui.py
+            expression_ui.draw(layout, context)
 
         else:
             # 衣服 / 刚体处理。原「次标准骨骼 / XPS 专项修正」全部是 tab1 手动分步的重复，
